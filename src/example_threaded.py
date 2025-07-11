@@ -107,7 +107,7 @@ class FocusTimerSession:
         self.session_stats['session_start'] = time.time()
         
         # Start AI processing
-        if not self.focus_detector.start():
+        if not self.focus_detector.git astart():
             logger.warning("Focus detector failed to start - continuing without AI")
         
         # Print header
