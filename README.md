@@ -1,48 +1,49 @@
 # Focus Assist
 
-A Pomodoro timer application with AI-powered focus tracking capabilities, designed to run on Snapdragon X Elite laptops utilizing the NPU for local AI processing.
+A Pomodoro timer with AI-powered focus tracking for Snapdragon X Elite laptops using local NPU processing.
 
-## Features (Planned)
+## Features
 
-- Customizable Pomodoro timer with work and break intervals
-- Task management with estimated and actual Pomodoro counts
-- Local AI-powered focus detection using:
+- ✅ Customizable Pomodoro timer with work/break intervals
+- ✅ Task management with progress tracking
+- ✅ Clean terminal interface with progress bars
+- 🔄 AI-powered focus detection (planned):
   - Screen content analysis (OCR + image classification)
-  - Webcam-based pose estimation and distraction detection
-- Detailed focus statistics and analytics
-- All AI processing runs locally using Qualcomm AI Hub optimized models
+  - Webcam pose estimation and distraction detection
+- 🔄 Local processing using Qualcomm AI Hub models
 
-## Getting Started
+## Quick Start
 
-1. Clone the repository
-2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+```bash
+# Install dependencies
+pip install -r requirements.txt
 
-3. Run the example script:
-   ```bash
-   python src/example.py
-   ```
-
-## Project Structure
-
-```
-src/
-  pomodoro/
-    timer.py      - Core Pomodoro timer implementation
-  example.py      - Example usage of the timer
+# Run demo
+python src/example.py
 ```
 
-## Development Status
+## Usage
 
-- [x] Core Pomodoro timer functionality
-- [ ] AI-powered focus detection
-- [ ] Screen content analysis
-- [ ] Webcam-based pose estimation
-- [ ] Statistics and analytics dashboard
-- [ ] GUI interface
+```python
+from pomodoro import PomodoroTimer, Task, TerminalOutput
+
+# Create tasks and timer
+tasks = [Task(id="1", title="Work on project", estimated_pomodoros=3)]
+timer = PomodoroTimer(work_seconds=1500, short_break_seconds=300, 
+                      long_break_seconds=900, tasks=tasks)
+
+# Use with terminal output
+output = TerminalOutput()
+output.print_header()
+timer.start()
+
+while timer.state != timer.state.IDLE:
+    output.update_display(timer)
+    if timer.should_take_snapshot():
+        # Add AI processing here
+        output.handle_snapshot()
+```
 
 ## License
 
-This project is licensed under the terms of the LICENSE file included in the repository.
+Licensed under the terms in the LICENSE file.
