@@ -5,6 +5,9 @@ from colorama import init, Fore, Style
 from tqdm import tqdm
 from typing import Optional
 from .timer import PomodoroTimer, Task, TaskStatus, TimerState
+from .constants import PROGRESS_BAR_WIDTH, PROGRESS_BAR_COLUMNS, PROGRESS_BAR_DESCRIPTION_WIDTH
+from .utils import TimeUtils, ProgressBarUtils, safe_execute_bool, safe_execute_none
+from .display import DisplayFormatter, ProgressBarFormatter
 
 # Initialize colorama for cross-platform color support
 init()
@@ -29,16 +32,12 @@ class TerminalOutput:
     @staticmethod
     def format_seconds(seconds: float) -> str:
         """Optimized time formatting for edge devices."""
-        total_seconds = int(seconds)
-        if total_seconds < 60:
-            return f"{total_seconds}s"
-        minutes, remaining_seconds = divmod(total_seconds, 60)
-        return f"{minutes}m {remaining_seconds}s"
+        return TimeUtils.format_seconds(seconds)
     
     def _print_bar(self, desc: str, percent: int, bar_fill: int, current: int, total: int) -> None:
         """Thread-safe progress bar printing with minimal allocations."""
         try:
-            bar_chars = '█' * bar_fill + ' ' * (40 - bar_fill)
+            bar_chars = '█' * bar_fill + ' ' * (PROGRESS_BAR_WIDTH - bar_fill)
             print(f"        {desc.strip()} {percent}%|{bar_chars}| "
                   f"{self.format_seconds(current)}/{self.format_seconds(total)}")
         except Exception as e:
@@ -63,9 +62,9 @@ class TerminalOutput:
             
             return CustomTqdm(
                 total=total_seconds, 
-                desc=f"        {color}{desc:<35}{Style.RESET_ALL}",
-                bar_format="{desc} {percentage:3.0f}%|{bar:40}| {n_fmt}/{total_fmt}",
-                ncols=120, unit='s', position=0, leave=False
+                desc=f"        {color}{desc:<{PROGRESS_BAR_DESCRIPTION_WIDTH}}{Style.RESET_ALL}",
+                bar_format=ProgressBarFormatter.create_progress_bar_format(),
+                ncols=PROGRESS_BAR_COLUMNS, unit='s', position=0, leave=False
             )
         except Exception as e:
             logger.error(f"Progress bar creation error: {e}")
@@ -76,7 +75,7 @@ class TerminalOutput:
         """Thread-safe header printing."""
         with self._lock:
             try:
-                print(f"\n{Fore.CYAN}Focus Timer Progress:{Style.RESET_ALL}")
+                print(DisplayFormatter.format_header())
             except Exception as e:
                 logger.error(f"Header print error: {e}")
                 self._stats['errors'] += 1
@@ -94,35 +93,88 @@ class TerminalOutput:
                 
                 # Only update on state change for performance
                 if timer.state != self._last_timer_state:
-                    if self._current_progress_bar:
-                        # Complete previous bar
-                        try:
-                            self._current_progress_bar.n = self._current_progress_bar.total
+                    if timer.state == TimerState.PAUSED:
+                        # Special handling for pause - update description in place
+                        if self._current_progress_bar:
+                            color, desc = self._get_state_info(timer)
+                            self._current_progress_bar.set_description(f"        {color}{desc:<35}{Style.RESET_ALL}")
                             self._current_progress_bar.refresh()
-                            self._current_progress_bar.close()
-                            self._print_bar(self._current_progress_bar.desc, 100, 40, 
-                                           self._current_progress_bar.total, self._current_progress_bar.total)
-                        except Exception as e:
-                            logger.error(f"Progress bar completion error: {e}")
-                    
-                    # Create new bar
-                    color, desc = self._get_state_info(timer)
-                    if timer.state == TimerState.WORK:
-                        self._print_task_info(timer)
+                        self._last_timer_state = timer.state
+                        return True  # Don't create new progress bar for pause
+                    elif timer.state == TimerState.SKIPPED:
+                        # Special handling for skip - update description in place and freeze progress
+                        if self._current_progress_bar:
+                            color, desc = self._get_state_info(timer)
+                            self._current_progress_bar.set_description(f"        {color}{desc:<35}{Style.RESET_ALL}")
+                            # Refresh immediately to show the SKIPPED state
+                            self._current_progress_bar.refresh()
+                        self._last_timer_state = timer.state
+                        return True  # Don't create new progress bar for skip
+                    elif self._last_timer_state == TimerState.PAUSED:
+                        # Resuming from pause - update description back to normal
+                        if self._current_progress_bar:
+                            color, desc = self._get_state_info(timer)
+                            self._current_progress_bar.set_description(f"        {color}{desc:<35}{Style.RESET_ALL}")
+                        self._last_timer_state = timer.state
+                        # Continue to normal progress update
                     else:
-                        print()
-                    
-                    interval_length = timer._get_current_interval_length()
-                    self._current_progress_bar = self.create_progress_bar(
-                        int(interval_length), desc, color
-                    )
-                    self._last_timer_state = timer.state
+                        # Normal state transitions (not involving pause)
+                        if self._current_progress_bar:
+                            # Handle previous bar completion
+                            try:
+                                if self._last_timer_state == TimerState.SKIPPED:
+                                    # For skipped intervals, print the final SKIPPED state to a permanent line
+                                    current_n = self._current_progress_bar.n
+                                    total = self._current_progress_bar.total
+                                    percent = min(100, int(current_n * 100 / max(1, total)))
+                                    bar_fill = min(40, int(current_n * 40 / max(1, total)))
+                                    desc = self._current_progress_bar.desc.strip()
+                                    self._current_progress_bar.close()
+                                    # Print the final SKIPPED state as a permanent line
+                                    self._print_bar(desc, percent, bar_fill, current_n, total)
+                                else:
+                                    # Complete previous bar to 100% for normal completion
+                                    self._current_progress_bar.n = self._current_progress_bar.total
+                                    self._current_progress_bar.refresh()
+                                    self._current_progress_bar.close()
+                                    self._print_bar(self._current_progress_bar.desc, 100, 40, 
+                                                   self._current_progress_bar.total, self._current_progress_bar.total)
+                            except Exception as e:
+                                logger.error(f"Progress bar completion error: {e}")
+                        
+                        # Create new bar for normal state transitions
+                        color, desc = self._get_state_info(timer)
+                        if timer.state == TimerState.WORK:
+                            self._print_task_info(timer)
+                        else:
+                            print()
+                        
+                        interval_length = timer._get_current_interval_length()
+                        self._current_progress_bar = self.create_progress_bar(
+                            int(interval_length), desc, color
+                        )
+                        self._last_timer_state = timer.state
                 
                 # Update progress efficiently
                 if self._current_progress_bar:
                     try:
-                        interval_length = timer._get_current_interval_length()
-                        self._current_progress_bar.n = int(interval_length - total_seconds)
+                        if timer.state == TimerState.PAUSED:
+                            # For paused state, don't update progress - keep it frozen
+                            pass
+                        elif timer.state == TimerState.SKIPPED:
+                            # For skipped state, set progress to the actual skip point
+                            if hasattr(timer, '_skipped_remaining') and timer._skipped_remaining is not None:
+                                interval_length = timer._get_current_interval_length()
+                                elapsed_time = interval_length - timer._skipped_remaining
+                                self._current_progress_bar.n = int(elapsed_time)
+                            # Refresh to show the SKIPPED state
+                            self._current_progress_bar.refresh()
+                            return True
+                        else:
+                            # Normal running state
+                            interval_length = timer._get_current_interval_length()
+                            self._current_progress_bar.n = int(interval_length - total_seconds)
+                        
                         self._current_progress_bar.refresh()
                     except Exception as e:
                         logger.error(f"Progress update error: {e}")
@@ -141,15 +193,40 @@ class TerminalOutput:
             return Fore.GREEN, f"WORK - {task.title}"
         elif timer.state == TimerState.SHORT_BREAK:
             return Fore.BLUE, "SHORT BREAK"
-        else:  # LONG_BREAK
+        elif timer.state == TimerState.LONG_BREAK:
             return Fore.MAGENTA, "LONG BREAK"
+        elif timer.state == TimerState.PAUSED:
+            # Show what was being done before pause
+            if hasattr(timer, '_pre_pause_state') and timer._pre_pause_state:
+                if timer._pre_pause_state == TimerState.WORK:
+                    task = timer.tasks[timer.current_task_idx]
+                    return Fore.YELLOW, f"PAUSED - WORK - {task.title}"
+                elif timer._pre_pause_state == TimerState.SHORT_BREAK:
+                    return Fore.YELLOW, "PAUSED - SHORT BREAK"
+                elif timer._pre_pause_state == TimerState.LONG_BREAK:
+                    return Fore.YELLOW, "PAUSED - LONG BREAK"
+            return Fore.YELLOW, "PAUSED"
+        elif timer.state == TimerState.SKIPPED:
+            # Show what was being done before skip
+            if hasattr(timer, '_pre_skip_state') and timer._pre_skip_state:
+                if timer._pre_skip_state == TimerState.WORK:
+                    task = timer.tasks[timer.current_task_idx]
+                    return Fore.RED, f"SKIPPED - WORK - {task.title}"
+                elif timer._pre_skip_state == TimerState.SHORT_BREAK:
+                    return Fore.RED, "SKIPPED - SHORT BREAK"
+                elif timer._pre_skip_state == TimerState.LONG_BREAK:
+                    return Fore.RED, "SKIPPED - LONG BREAK"
+            return Fore.RED, "SKIPPED"
+        else:  # IDLE or other
+            return Fore.WHITE, "IDLE"
     
     def _print_task_info(self, timer: PomodoroTimer) -> None:
         """Print current task information."""
         try:
             task = timer.tasks[timer.current_task_idx]
-            print(f"\n{Fore.YELLOW}Current Task: {task.title} "
-                  f"({task.completed_pomodoros}/{task.estimated_pomodoros} pomodoros){Style.RESET_ALL}")
+            print(DisplayFormatter.format_task_info(
+                task.title, task.completed_pomodoros, task.estimated_pomodoros
+            ))
         except Exception as e:
             logger.error(f"Task info print error: {e}")
     
@@ -157,8 +234,9 @@ class TerminalOutput:
         """Thread-safe snapshot event handling."""
         try:
             logger.debug("Taking snapshot for focus detection...")
-            if self.debug:
-                print(f"\n{Fore.YELLOW}Snapshot taken!{Style.RESET_ALL}")
+            snapshot_msg = DisplayFormatter.format_snapshot_message(self.debug)
+            if snapshot_msg:
+                print(snapshot_msg)
         except Exception as e:
             logger.error(f"Snapshot handling error: {e}")
     
@@ -168,7 +246,7 @@ class TerminalOutput:
             try:
                 if self._current_progress_bar:
                     self._current_progress_bar.close()
-                print(f"\n{Fore.RED}Timer stopped by user{Style.RESET_ALL}")
+                print(DisplayFormatter.format_interruption_message())
             except Exception as e:
                 logger.error(f"Interruption handling error: {e}")
     

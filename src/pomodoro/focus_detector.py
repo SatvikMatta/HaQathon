@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from typing import Optional, Callable, Dict, Any
 from enum import Enum
 import concurrent.futures
+from .constants import MAX_FOCUS_DETECTOR_WORKERS, MAX_FOCUS_DETECTOR_QUEUE_SIZE, FOCUS_DETECTOR_TIMEOUT_SECONDS, ErrorMessages
+from .utils import PerformanceUtils
 
 
 class FocusLevel(Enum):
@@ -53,9 +55,9 @@ class EdgeOptimizedFocusDetector:
     
     def __init__(
         self,
-        max_workers: int = 2,
-        max_queue_size: int = 10,
-        timeout_seconds: float = 5.0,
+        max_workers: int = MAX_FOCUS_DETECTOR_WORKERS,
+        max_queue_size: int = MAX_FOCUS_DETECTOR_QUEUE_SIZE,
+        timeout_seconds: float = FOCUS_DETECTOR_TIMEOUT_SECONDS,
         enable_screen_analysis: bool = True,
         enable_pose_detection: bool = True
     ):
@@ -99,7 +101,7 @@ class EdgeOptimizedFocusDetector:
                 self._detectors['pose'] = PoseDetector()
                 
         except Exception as e:
-            self.logger.error(f"Failed to initialize detectors: {e}")
+            self.logger.error(f"{ErrorMessages.FOCUS_DETECTOR_INIT_ERROR}: {e}")
 
     def start(self) -> bool:
         """Start the focus detection service."""
@@ -113,7 +115,7 @@ class EdgeOptimizedFocusDetector:
                 return True
                 
         except Exception as e:
-            self.logger.error(f"Failed to start focus detector: {e}")
+            self.logger.error(f"{ErrorMessages.FOCUS_DETECTOR_START_ERROR}: {e}")
             return False
 
     def stop(self) -> None:

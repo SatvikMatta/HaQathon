@@ -5,6 +5,8 @@ from pydantic import BaseModel, Field, validator
 import threading
 import time
 from dataclasses import dataclass
+from .constants import MAX_TASKS_EDGE_DEVICE, MAX_TASK_TITLE_LENGTH, MAX_TASK_DESCRIPTION_LENGTH, MAX_ESTIMATED_POMODOROS, SKIP_DISPLAY_DURATION_SECONDS, ErrorMessages
+from .utils import safe_execute_bool, safe_execute_none, ValidationUtils
 
 
 class TaskStatus(Enum):
@@ -16,16 +18,16 @@ class TaskStatus(Enum):
 
 class Task(BaseModel):
     id: str
-    title: str = Field(..., min_length=1, max_length=100)
-    description: Optional[str] = Field(None, max_length=500)
-    estimated_pomodoros: int = Field(..., gt=0, le=50)
+    title: str = Field(..., min_length=1, max_length=MAX_TASK_TITLE_LENGTH)
+    description: Optional[str] = Field(None, max_length=MAX_TASK_DESCRIPTION_LENGTH)
+    estimated_pomodoros: int = Field(..., gt=0, le=MAX_ESTIMATED_POMODOROS)
     completed_pomodoros: int = Field(default=0, ge=0)
     status: TaskStatus = TaskStatus.NOT_STARTED
 
     @validator('estimated_pomodoros')
     def validate_pomodoros(cls, v):
         if v <= 0:
-            raise ValueError('estimated_pomodoros must be positive')
+            raise ValueError(ErrorMessages.INVALID_POMODOROS)
         return v
 
 
@@ -34,6 +36,7 @@ class TimerState(Enum):
     SHORT_BREAK = "short_break"
     LONG_BREAK = "long_break"
     PAUSED = "paused"
+    SKIPPED = "skipped"
     IDLE = "idle"
 
 
@@ -50,9 +53,9 @@ class TimerConfig:
         # Validate configuration
         if any(x <= 0 for x in [self.work_seconds, self.short_break_seconds, 
                                self.long_break_seconds, self.snapshot_interval]):
-            raise ValueError("All time intervals must be positive")
+            raise ValueError(ErrorMessages.INVALID_TIME_INTERVALS)
         if self.pomos_before_long_break <= 0:
-            raise ValueError("pomos_before_long_break must be positive")
+            raise ValueError(ErrorMessages.INVALID_LONG_BREAK_COUNT)
 
 
 class PomodoroTimer:
@@ -60,7 +63,8 @@ class PomodoroTimer:
     
     __slots__ = ('_config', '_tasks', '_current_task_idx', '_completed_pomos', 
                  '_state', '_start_time', '_end_time', '_next_snapshot_time', 
-                 '_lock', '_snapshot_callbacks', '_state_callbacks')
+                 '_lock', '_snapshot_callbacks', '_state_callbacks', '_pre_pause_state', '_paused_remaining',
+                 '_pre_skip_state', '_skipped_remaining', '_skip_display_shown')
 
     def __init__(
         self,
@@ -72,10 +76,9 @@ class PomodoroTimer:
         pomos_before_long_break: int = 4
     ):
         # Validate inputs
-        if not tasks:
-            raise ValueError("At least one task is required")
-        if len(tasks) > 20:  # Edge device memory constraint
-            raise ValueError("Maximum 20 tasks supported on edge devices")
+        ValidationUtils.validate_task_list(tasks)
+        if len(tasks) > MAX_TASKS_EDGE_DEVICE:
+            raise ValueError(ErrorMessages.TOO_MANY_TASKS)
             
         # Immutable config for thread safety
         self._config = TimerConfig(
@@ -95,6 +98,11 @@ class PomodoroTimer:
         self._start_time: Optional[float] = None  # Use timestamp for performance
         self._end_time: Optional[float] = None
         self._next_snapshot_time: Optional[float] = None
+        self._pre_pause_state: Optional[TimerState] = None
+        self._paused_remaining: Optional[float] = None
+        self._pre_skip_state: Optional[TimerState] = None
+        self._skipped_remaining: Optional[float] = None
+        self._skip_display_shown: bool = False
         
         # Callback systems for AI processing
         self._snapshot_callbacks: List[Callable[[], None]] = []
@@ -140,11 +148,18 @@ class PomodoroTimer:
             with self._lock:
                 now = time.time()
                 
-                if self._state == TimerState.PAUSED and self._end_time and self._start_time:
-                    # Resume from pause
-                    remaining = self._end_time - self._start_time
+                if self._state == TimerState.PAUSED and self._paused_remaining is not None:
+                    # Resume from pause - use stored remaining time
                     self._start_time = now
-                    self._end_time = now + remaining
+                    self._end_time = now + self._paused_remaining
+                    # Restore the previous state (what we were doing before pause)
+                    if self._pre_pause_state is not None:
+                        self._state = self._pre_pause_state
+                    else:
+                        self._state = TimerState.WORK  # Default fallback
+                    # Clear pause state
+                    self._paused_remaining = None
+                    self._pre_pause_state = None
                 else:
                     # Start new interval
                     if self._current_task_idx >= len(self._tasks):
@@ -165,7 +180,7 @@ class PomodoroTimer:
                 
         except Exception as e:
             # Edge device safeguard
-            print(f"Timer start error: {e}")
+            print(f"{ErrorMessages.TIMER_START_ERROR}: {e}")
             return False
 
     def pause(self) -> bool:
@@ -173,21 +188,48 @@ class PomodoroTimer:
         try:
             with self._lock:
                 if self._state in [TimerState.WORK, TimerState.SHORT_BREAK, TimerState.LONG_BREAK]:
+                    # Store the current state and remaining time before pausing
+                    self._pre_pause_state = self._state
+                    if self._end_time and self._start_time:
+                        now = time.time()
+                        self._paused_remaining = max(0, self._end_time - now)
                     self._state = TimerState.PAUSED
                     self._notify_state_change(self._state)
                     return True
                 return False
         except Exception as e:
-            print(f"Timer pause error: {e}")
+            print(f"{ErrorMessages.TIMER_PAUSE_ERROR}: {e}")
             return False
 
     def skip(self) -> bool:
         """Skip the current interval. Returns success status."""
         try:
             with self._lock:
-                return self._handle_interval_completion()
+                if self._state in [TimerState.WORK, TimerState.SHORT_BREAK, TimerState.LONG_BREAK, TimerState.PAUSED]:
+                    # Handle skipping while paused
+                    if self._state == TimerState.PAUSED:
+                        # Use the pre-pause state and remaining time
+                        self._pre_skip_state = self._pre_pause_state if self._pre_pause_state else TimerState.WORK
+                        self._skipped_remaining = self._paused_remaining if self._paused_remaining else 0
+                    else:
+                        # Store the current state and remaining time before skipping
+                        self._pre_skip_state = self._state
+                        if self._end_time and self._start_time:
+                            now = time.time()
+                            self._skipped_remaining = max(0, self._end_time - now)
+                    
+                    # Set to SKIPPED state for display
+                    self._state = TimerState.SKIPPED
+                    self._skip_display_shown = False  # Reset display flag
+                    self._notify_state_change(self._state)
+                    
+                    # Set end time to allow SKIPPED display to be visible
+                    self._end_time = time.time() + SKIP_DISPLAY_DURATION_SECONDS
+                    
+                    return True
+                return False
         except Exception as e:
-            print(f"Timer skip error: {e}")
+            print(f"{ErrorMessages.TIMER_SKIP_ERROR}: {e}")
             return False
 
     def get_remaining_time(self) -> Optional[timedelta]:
@@ -196,6 +238,31 @@ class PomodoroTimer:
             with self._lock:
                 if not self._start_time or not self._end_time or self._state == TimerState.IDLE:
                     return None
+                
+                # If paused, return the stored remaining time
+                if self._state == TimerState.PAUSED:
+                    if self._paused_remaining is not None:
+                        return timedelta(seconds=max(0, self._paused_remaining))
+                    else:
+                        # Fallback calculation if paused_remaining not stored
+                        now = time.time()
+                        return timedelta(seconds=max(0, self._end_time - now))
+                
+                # If skipped, handle display and completion
+                if self._state == TimerState.SKIPPED:
+                    now = time.time()
+                    if now >= self._end_time and self._skip_display_shown:
+                        # Complete the skip after display period
+                        self._handle_interval_completion()
+                        return self.get_remaining_time()
+                    else:
+                        # Mark that we've shown the skip display
+                        self._skip_display_shown = True
+                        # Return the stored remaining time at skip point
+                        if self._skipped_remaining is not None:
+                            return timedelta(seconds=max(0, self._skipped_remaining))
+                        else:
+                            return timedelta(seconds=0)  # Fallback for skipped
                 
                 now = time.time()
                 if now >= self._end_time:
@@ -245,18 +312,28 @@ class PomodoroTimer:
 
     def _get_current_interval_length(self) -> float:
         """Get the length of the current interval in seconds."""
-        if self._state == TimerState.WORK:
+        # Handle SKIPPED state by using the pre-skip state
+        actual_state = self._state
+        if self._state == TimerState.SKIPPED and self._pre_skip_state:
+            actual_state = self._pre_skip_state
+            
+        if actual_state == TimerState.WORK:
             return self._config.work_seconds
-        elif self._state == TimerState.SHORT_BREAK:
+        elif actual_state == TimerState.SHORT_BREAK:
             return self._config.short_break_seconds
-        elif self._state == TimerState.LONG_BREAK:
+        elif actual_state == TimerState.LONG_BREAK:
             return self._config.long_break_seconds
         return 0
 
     def _handle_interval_completion(self) -> bool:
         """Handle the completion of a work or break interval."""
         try:
-            if self._state == TimerState.WORK:
+            # Determine the actual state that was being executed (handle SKIPPED)
+            actual_state = self._state
+            if self._state == TimerState.SKIPPED and self._pre_skip_state:
+                actual_state = self._pre_skip_state
+            
+            if actual_state == TimerState.WORK:
                 # Complete pomodoro
                 self._completed_pomos += 1
                 if self._current_task_idx < len(self._tasks):
@@ -281,6 +358,11 @@ class PomodoroTimer:
                     self._state = TimerState.IDLE
                     self._notify_state_change(self._state)
                     return True
+            
+            # Clear skip state since we've handled completion
+            self._pre_skip_state = None
+            self._skipped_remaining = None
+            self._skip_display_shown = False
                 
             # Start new interval
             now = time.time()

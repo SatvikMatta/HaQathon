@@ -1,4 +1,5 @@
 from pomodoro import PomodoroTimer, Task, TerminalOutput
+from pomodoro.constants import DEMO_WORK_SECONDS, DEMO_SHORT_BREAK_SECONDS, DEMO_LONG_BREAK_SECONDS, DEMO_SNAPSHOT_INTERVAL
 import time
 import logging
 
@@ -31,11 +32,11 @@ def main(debug: bool = False):
 
     # Create timer with demo intervals
     timer = PomodoroTimer(
-        work_seconds=5,        # 5 sec work for demo
-        short_break_seconds=3, # 3 sec short break
-        long_break_seconds=8,  # 8 sec long break
+        work_seconds=DEMO_WORK_SECONDS,
+        short_break_seconds=DEMO_SHORT_BREAK_SECONDS,
+        long_break_seconds=DEMO_LONG_BREAK_SECONDS,
         tasks=demo_tasks,
-        snapshot_interval=5,   # check every 5 sec
+        snapshot_interval=DEMO_SNAPSHOT_INTERVAL,
     )
 
     # Create terminal output handler
