@@ -248,17 +248,17 @@ class ModernPomodoroGUI:
         )
         add_task_btn.pack(pady=20)
         
-        # Status bar
-        self.status_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-        self.status_frame.pack(fill="x", pady=(10, 0))
+        # Status bar - REMOVED per user request
+        # self.status_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        # self.status_frame.pack(fill="x", pady=(10, 0))
         
-        self.status_label = ctk.CTkLabel(
-            self.status_frame,
-            text="Ready to start - Terminal output running in background",
-            font=ctk.CTkFont(size=12),
-            text_color=COLORS['text_light']
-        )
-        self.status_label.pack()
+        # self.status_label = ctk.CTkLabel(
+        #     self.status_frame,
+        #     text="Ready to start - Terminal output running in background",
+        #     font=ctk.CTkFont(size=12),
+        #     text_color=COLORS['text_light']
+        # )
+        # self.status_label.pack()
         
     def setup_timer(self):
         """Initialize the timer with existing code"""
@@ -348,7 +348,7 @@ class ModernPomodoroGUI:
                     # Show default display when not running
                     # Use color based on current mode
                     if self.current_mode == "Pomodoro":
-                        color = COLORS['work']
+                        color = COLORS['primary'] # Changed to use red primary color
                     elif self.current_mode == "Short Break":
                         color = COLORS['short_break']
                     elif self.current_mode == "Long Break":
@@ -397,7 +397,7 @@ class ModernPomodoroGUI:
     def get_timer_color(self, state):
         """Get color for timer display based on current state"""
         if state == TimerState.WORK:
-            return COLORS['work']
+            return COLORS['primary']  # Changed to use red primary color instead of green
         elif state == TimerState.SHORT_BREAK:
             return COLORS['short_break']
         elif state == TimerState.LONG_BREAK:
@@ -513,7 +513,7 @@ class ModernPomodoroGUI:
             
         # Update timer display with appropriate color
         if mode == "Pomodoro":
-            color = COLORS['work']
+            color = COLORS['primary'] # Changed to use red primary color
         elif mode == "Short Break":
             color = COLORS['short_break']
         elif mode == "Long Break":
@@ -554,7 +554,7 @@ class ModernPomodoroGUI:
             self.pause_button.configure(text="PAUSE")
             # Use color based on current mode
             if self.current_mode == "Pomodoro":
-                color = COLORS['work']
+                color = COLORS['primary'] # Changed to use red primary color
             elif self.current_mode == "Short Break":
                 color = COLORS['short_break']
             elif self.current_mode == "Long Break":
@@ -635,9 +635,150 @@ class ModernPomodoroGUI:
             self.update_status("Failed to skip interval")
         
     def add_task(self):
-        """Add a new task (simplified for mockup)"""
-        self.update_status("Task management - Feature coming soon!")
+        """Add a new task with proper dialog"""
+        # Create simple dialog for adding task
+        dialog = ctk.CTkToplevel(self.root)
+        dialog.title("Add New Task")
+        dialog.geometry("400x300")
+        dialog.resizable(False, False)
+        dialog.configure(fg_color=COLORS['card'])
         
+        # Make dialog modal
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # Center dialog
+        dialog.update_idletasks()
+        x = (self.root.winfo_screenwidth() // 2) - (400 // 2)
+        y = (self.root.winfo_screenheight() // 2) - (300 // 2)
+        dialog.geometry(f"400x300+{x}+{y}")
+        
+        # Create form
+        main_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        # Title
+        title_label = ctk.CTkLabel(
+            main_frame,
+            text="Add New Task",
+            font=ctk.CTkFont(size=18, weight="bold"),
+            text_color=COLORS['text']
+        )
+        title_label.pack(pady=(0, 20))
+        
+        # Task name
+        name_label = ctk.CTkLabel(
+            main_frame,
+            text="Task Name:",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color=COLORS['text']
+        )
+        name_label.pack(anchor="w", pady=(0, 5))
+        
+        name_entry = ctk.CTkEntry(
+            main_frame,
+            placeholder_text="Enter task name...",
+            font=ctk.CTkFont(size=14),
+            height=40
+        )
+        name_entry.pack(fill="x", pady=(0, 15))
+        
+        # Description
+        desc_label = ctk.CTkLabel(
+            main_frame,
+            text="Description (optional):",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color=COLORS['text']
+        )
+        desc_label.pack(anchor="w", pady=(0, 5))
+        
+        desc_entry = ctk.CTkTextbox(
+            main_frame,
+            height=60,
+            font=ctk.CTkFont(size=14)
+        )
+        desc_entry.pack(fill="x", pady=(0, 15))
+        
+        # Estimated pomodoros
+        pomodoros_label = ctk.CTkLabel(
+            main_frame,
+            text="Estimated Pomodoros:",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color=COLORS['text']
+        )
+        pomodoros_label.pack(anchor="w", pady=(0, 5))
+        
+        pomodoros_entry = ctk.CTkEntry(
+            main_frame,
+            placeholder_text="Enter number (e.g., 3)",
+            font=ctk.CTkFont(size=14),
+            height=40,
+            width=200
+        )
+        pomodoros_entry.pack(anchor="w", pady=(0, 20))
+        
+        # Buttons
+        buttons_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        buttons_frame.pack(fill="x")
+        
+        def submit_task():
+            """Submit the new task"""
+            task_name = name_entry.get().strip()
+            task_desc = desc_entry.get("1.0", "end-1c").strip()
+            
+            if not task_name:
+                self.update_status("Please enter a task name")
+                return
+            
+            try:
+                estimated_pomodoros = int(pomodoros_entry.get() or "1")
+            except ValueError:
+                self.update_status("Please enter a valid number for pomodoros")
+                return
+            
+            # Add the task (for mockup, just show success message)
+            self.update_status(f"Added task: {task_name} ({estimated_pomodoros} pomodoros)")
+            dialog.destroy()
+        
+        def cancel_task():
+            """Cancel task creation"""
+            dialog.destroy()
+        
+        # Cancel button
+        cancel_btn = ctk.CTkButton(
+            buttons_frame,
+            text="Cancel",
+            width=100,
+            height=35,
+            font=ctk.CTkFont(size=14),
+            fg_color="transparent",
+            text_color=COLORS['text'],
+            hover_color=COLORS['background'],
+            border_width=2,
+            border_color=COLORS['text_light'],
+            command=cancel_task
+        )
+        cancel_btn.pack(side="right", padx=(10, 0))
+        
+        # Submit button
+        submit_btn = ctk.CTkButton(
+            buttons_frame,
+            text="Add Task",
+            width=120,
+            height=35,
+            font=ctk.CTkFont(size=14, weight="bold"),
+            fg_color=COLORS['primary'],
+            hover_color=COLORS['primary_dark'],
+            command=submit_task
+        )
+        submit_btn.pack(side="right")
+        
+        # Focus on name entry
+        name_entry.focus()
+        
+        # Bind Enter key to submit
+        dialog.bind('<Return>', lambda event: submit_task())
+
     def on_timer_state_change(self, new_state: TimerState):
         """Handle timer state changes"""
         state_text = new_state.value.replace('_', ' ').title()
@@ -655,7 +796,7 @@ class ModernPomodoroGUI:
         
         # Use color based on current mode
         if self.current_mode == "Pomodoro":
-            color = COLORS['work']
+            color = COLORS['primary'] # Changed to use red primary color
         elif self.current_mode == "Short Break":
             color = COLORS['short_break']
         elif self.current_mode == "Long Break":
@@ -668,8 +809,9 @@ class ModernPomodoroGUI:
         self.update_status(f"{self.current_mode} completed! Ready to start new session")
         
     def update_status(self, message):
-        """Update status bar"""
-        self.status_label.configure(text=message)
+        """Update status bar - simplified for mockup"""
+        # For mockup, just print to console since we removed the status bar
+        print(f"Status: {message}")
         
     def run(self):
         """Start the GUI application"""
