@@ -160,6 +160,11 @@ class PomodoroTimer:
                     # Clear pause state
                     self._paused_remaining = None
                     self._pre_pause_state = None
+                    
+                    # Ensure task status is IN_PROGRESS when resuming work
+                    if self._state == TimerState.WORK and self._current_task_idx < len(self._tasks):
+                        current_task = self._tasks[self._current_task_idx]
+                        current_task.status = TaskStatus.IN_PROGRESS
                 else:
                     # Start new interval
                     if self._current_task_idx >= len(self._tasks):
@@ -170,10 +175,9 @@ class PomodoroTimer:
                     self._end_time = now + self._config.work_seconds
                     self._next_snapshot_time = now + self._config.snapshot_interval
                     
-                    # Update task status
+                    # Update task status to IN_PROGRESS
                     current_task = self._tasks[self._current_task_idx]
-                    if current_task.status != TaskStatus.IN_PROGRESS:
-                        current_task.status = TaskStatus.IN_PROGRESS
+                    current_task.status = TaskStatus.IN_PROGRESS
                 
                 self._notify_state_change(self._state)
                 return True

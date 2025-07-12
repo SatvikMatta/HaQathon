@@ -53,24 +53,24 @@ class Theme:
     
     # Dark Theme
     DARK = {
-        'bg_primary': '#1A1A1A',
-        'bg_secondary': '#2D2D2D',
-        'bg_tertiary': '#404040',
-        'card_bg': '#2D2D2D',
+        'bg_primary': '#0D1117',      # GitHub dark background
+        'bg_secondary': '#161B22',    # Slightly lighter for panels
+        'bg_tertiary': '#21262D',     # Even lighter for tertiary elements
+        'card_bg': '#21262D',         # Card background - distinct from primary
         'primary': '#FF6B6B',
         'primary_hover': '#FF5252',
         'secondary': '#4ECDC4',
         'secondary_hover': '#26A69A',
         'accent': '#45B7D1',
         'accent_hover': '#2196F3',
-        'text_primary': '#FFFFFF',
-        'text_secondary': '#E0E0E0',
-        'text_muted': '#B0B0B0',
-        'success': '#4CAF50',
-        'warning': '#FF9800',
-        'error': '#F44336',
-        'border': '#404040',
-        'shadow': '#00000030'
+        'text_primary': '#F0F6FC',    # Slightly off-white for better readability
+        'text_secondary': '#E6EDF3',  # Very light gray
+        'text_muted': '#7D8590',      # Proper muted gray
+        'success': '#3FB950',         # GitHub green
+        'warning': '#D29922',         # GitHub amber
+        'error': '#F85149',           # GitHub red
+        'border': '#30363D',          # Proper dark border
+        'shadow': '#00000080'         # More pronounced shadow
     }
 
 class TaskCard(ctk.CTkFrame):
@@ -91,12 +91,16 @@ class TaskCard(ctk.CTkFrame):
         self.status_label = None
         self.title_label = None
         
+        # Force explicit color configuration for both light and dark themes
         self.configure(
             fg_color=theme['card_bg'],
             corner_radius=12,
             border_width=1,
             border_color=theme['border']
         )
+        
+        # Update immediately to ensure colors are applied
+        self.update_idletasks()
         
         self.create_widgets()
         
@@ -105,6 +109,12 @@ class TaskCard(ctk.CTkFrame):
         # Clear existing widgets
         for widget in self.winfo_children():
             widget.destroy()
+        
+        # Force background color update
+        self.configure(
+            fg_color=self.theme['card_bg'],
+            border_color=self.theme['border']
+        )
         
         # Main container
         container = ctk.CTkFrame(self, fg_color='transparent')
@@ -227,14 +237,21 @@ class TaskCard(ctk.CTkFrame):
             return
         
         try:
-            # Update progress bar
+            # Update progress bar with current theme colors
             progress_value = self.task.completed_pomodoros / self.task.estimated_pomodoros if self.task.estimated_pomodoros > 0 else 0
             self.progress_bar.set(progress_value)
+            self.progress_bar.configure(
+                progress_color=self.theme['primary'],
+                fg_color=self.theme['bg_tertiary']
+            )
             
-            # Update progress text
-            self.progress_text.configure(text=f"{self.task.completed_pomodoros}/{self.task.estimated_pomodoros} 🍅")
+            # Update progress text with current theme color
+            self.progress_text.configure(
+                text=f"{self.task.completed_pomodoros}/{self.task.estimated_pomodoros} 🍅",
+                text_color=self.theme['primary']
+            )
             
-            # Update status
+            # Update status with current theme colors
             status_colors = {
                 TaskStatus.NOT_STARTED: self.theme['text_muted'],
                 TaskStatus.IN_PROGRESS: self.theme['primary'],
@@ -268,7 +285,7 @@ class FocusAssistApp:
         self.terminal_output: Optional[TerminalOutput] = None
         self.terminal_thread: Optional[threading.Thread] = None
         self.is_timer_running = False
-        self.is_demo_mode = True  # Start in demo mode for testing
+        # Demo mode removed - use normal timings
         
         # UI optimization
         self.task_cards: List[TaskCard] = []
@@ -297,6 +314,16 @@ class FocusAssistApp:
         
         # Start update loop
         self.start_update_loop()
+        
+        # Set initial state colors to match work mode (default)
+        self.root.after(100, self._apply_initial_state_colors)
+        
+    def _apply_initial_state_colors(self):
+        """Apply initial state colors to match work mode"""
+        # Set initial timer state and update colors
+        self.current_timer_state = TimerState.WORK
+        self.update_mode_buttons_for_state(TimerState.WORK)
+        self._update_timer_colors_immediate()
         
     def create_main_interface(self):
         """Create the main application interface"""
@@ -328,41 +355,29 @@ class FocusAssistApp:
         title_frame = ctk.CTkFrame(header_frame, fg_color='transparent')
         title_frame.grid(row=0, column=0, sticky='w')
         
-        title_label = ctk.CTkLabel(
+        self.title_label = ctk.CTkLabel(
             title_frame,
             text="🎯 Focus Assist",
             font=ctk.CTkFont(size=28, weight='bold'),
             text_color=self.current_theme['primary']
         )
-        title_label.pack(side='left')
+        self.title_label.pack(side='left')
         
-        subtitle_label = ctk.CTkLabel(
+        self.subtitle_label = ctk.CTkLabel(
             title_frame,
             text="AI-Powered Productivity Timer",
             font=ctk.CTkFont(size=14),
             text_color=self.current_theme['text_muted']
         )
-        subtitle_label.pack(side='left', padx=(15, 0))
+        self.subtitle_label.pack(side='left', padx=(15, 0))
         
         # Controls
         controls_frame = ctk.CTkFrame(header_frame, fg_color='transparent')
         controls_frame.grid(row=0, column=1, sticky='e')
         
-        # Demo mode toggle
-        self.demo_mode_var = ctk.BooleanVar(value=self.is_demo_mode)
-        demo_toggle = ctk.CTkSwitch(
-            controls_frame,
-            text="Demo Mode",
-            variable=self.demo_mode_var,
-            command=self.toggle_demo_mode,
-            font=ctk.CTkFont(size=12),
-            text_color=self.current_theme['text_secondary']
-        )
-        demo_toggle.pack(side='left', padx=(0, 20))
-        
         # Dark mode toggle
         self.dark_mode_var = ctk.BooleanVar(value=self.is_dark_mode)
-        dark_mode_toggle = ctk.CTkSwitch(
+        self.dark_mode_toggle = ctk.CTkSwitch(
             controls_frame,
             text="Dark Mode",
             variable=self.dark_mode_var,
@@ -370,7 +385,7 @@ class FocusAssistApp:
             font=ctk.CTkFont(size=12),
             text_color=self.current_theme['text_secondary']
         )
-        dark_mode_toggle.pack(side='left')
+        self.dark_mode_toggle.pack(side='left')
         
     def create_main_content(self):
         """Create main content area"""
@@ -384,7 +399,7 @@ class FocusAssistApp:
         """Create timer panel"""
         self.timer_panel = ctk.CTkFrame(
             self.main_container,
-            fg_color=self.current_theme['card_bg'],
+            fg_color=self.current_theme['bg_secondary'],
             corner_radius=16,
             border_width=1,
             border_color=self.current_theme['border']
@@ -397,33 +412,35 @@ class FocusAssistApp:
         timer_content.grid(row=0, column=0, sticky='nsew', padx=30, pady=30)
         timer_content.grid_columnconfigure(0, weight=1)
         
-        # Current task display
-        self.current_task_frame = ctk.CTkFrame(timer_content, fg_color='transparent')
+        # Current task display with fixed height buffer
+        self.current_task_frame = ctk.CTkFrame(timer_content, fg_color='transparent', height=80)
         self.current_task_frame.grid(row=0, column=0, sticky='ew', pady=(0, 20))
+        self.current_task_frame.grid_propagate(False)  # Prevent frame from shrinking
         
-        current_task_title = ctk.CTkLabel(
+        self.current_task_title = ctk.CTkLabel(
             self.current_task_frame,
             text="Current Task",
             font=ctk.CTkFont(size=14, weight='bold'),
             text_color=self.current_theme['text_muted']
         )
-        current_task_title.pack()
+        self.current_task_title.pack()
         
         self.current_task_label = ctk.CTkLabel(
             self.current_task_frame,
             text="Select a task to begin",
-            font=ctk.CTkFont(size=18, weight='bold'),
+            font=ctk.CTkFont(size=16, weight='bold'),
             text_color=self.current_theme['text_primary'],
-            wraplength=300
+            wraplength=280,
+            height=40  # Fixed height to prevent vertical expansion
         )
         self.current_task_label.pack(pady=(5, 0))
         
         # Timer display
         self.timer_display_frame = ctk.CTkFrame(
             timer_content,
-            fg_color=self.current_theme['bg_secondary'],
+            fg_color=self.current_theme['primary'],
             corner_radius=20,
-            border_width=2,
+            border_width=0,
             border_color=self.current_theme['primary']
         )
         self.timer_display_frame.grid(row=1, column=0, sticky='ew', pady=(0, 20))
@@ -432,7 +449,7 @@ class FocusAssistApp:
             self.timer_display_frame,
             text="25:00",
             font=ctk.CTkFont(size=64, weight='bold'),
-            text_color=self.current_theme['primary']
+            text_color="white"
         )
         self.timer_label.pack(pady=40)
         
@@ -454,7 +471,8 @@ class FocusAssistApp:
                 variable=self.mode_var,
                 value=mode,
                 font=ctk.CTkFont(size=14),
-                text_color=self.current_theme['text_secondary']
+                text_color=self.current_theme['text_secondary'],
+                width=100  # Fixed width to prevent expansion when bolding
             )
             mode_btn.pack(side='left', padx=10)
             self.mode_buttons[mode] = mode_btn
@@ -512,7 +530,7 @@ class FocusAssistApp:
         """Create tasks panel"""
         self.tasks_panel = ctk.CTkFrame(
             self.main_container,
-            fg_color=self.current_theme['card_bg'],
+            fg_color=self.current_theme['bg_secondary'],
             corner_radius=16,
             border_width=1,
             border_color=self.current_theme['border']
@@ -552,7 +570,10 @@ class FocusAssistApp:
             self.tasks_panel,
             fg_color='transparent',
             corner_radius=0,
-            height=300  # Set minimum height to ensure scrolling works
+            height=300,  # Set minimum height to ensure scrolling works
+            scrollbar_fg_color='transparent',  # Make scrollbar transparent
+            scrollbar_button_color=self.current_theme['text_muted'],
+            scrollbar_button_hover_color=self.current_theme['primary']
         )
         self.tasks_scroll_frame.grid(row=1, column=0, sticky='nsew', padx=20, pady=20)
         self.tasks_scroll_frame.grid_columnconfigure(0, weight=1)
@@ -568,14 +589,14 @@ class FocusAssistApp:
         )
         empty_icon.pack()
         
-        empty_text = ctk.CTkLabel(
+        self.empty_text = ctk.CTkLabel(
             self.empty_state_frame,
             text="No tasks yet\nAdd your first task to get started!",
             font=ctk.CTkFont(size=14),
             text_color=self.current_theme['text_muted'],
             justify='center'
         )
-        empty_text.pack(pady=(10, 0))
+        self.empty_text.pack(pady=(10, 0))
         
     # Comment out the footer creation method since we removed the footer
     # def create_footer(self):
@@ -610,52 +631,115 @@ class FocusAssistApp:
         self.status_label.pack()
         
     def toggle_dark_mode(self):
-        """Toggle between light and dark modes"""
+        """Toggle between light and dark modes with seamless transition"""
         self.is_dark_mode = self.dark_mode_var.get()
         self.current_theme = Theme.DARK if self.is_dark_mode else Theme.LIGHT
         
         # Update CustomTkinter appearance
         ctk.set_appearance_mode("dark" if self.is_dark_mode else "light")
         
-        # Schedule efficient theme update
-        self.schedule_update('theme')
+        # Apply theme changes seamlessly
+        self._apply_theme_seamlessly()
         
-    def toggle_demo_mode(self):
-        """Toggle demo mode"""
-        self.is_demo_mode = self.demo_mode_var.get()
-        # Update timer if it exists
-        if self.timer and not self.is_timer_running:
-            self.setup_timer()
+    def _apply_theme_seamlessly(self):
+        """Apply theme changes seamlessly with window hiding for instant transition"""
+        # Hide window during theme transition to prevent flickering
+        self.root.withdraw()
+        
+        try:
+            # Batch all theme updates together
+            self._apply_theme_immediate()
+            
+            # Force all updates to be processed immediately
+            self.root.update_idletasks()
+            
+            # Small delay to ensure all changes are rendered
+            self.root.after(1, self._show_window_after_theme_change)
+            
+        except Exception as e:
+            print(f"Theme transition error: {e}")
+            # Ensure window is shown even if there's an error
+            self.root.deiconify()
+    
+    def _show_window_after_theme_change(self):
+        """Show window after theme change is complete"""
+        self.root.deiconify()
+        # Ensure window is brought to front
+        self.root.lift()
+        self.root.focus_force()
+        
+    # Demo mode removed - no longer needed
             
     def apply_theme(self):
         """Schedule theme application"""
         self.schedule_update('theme')
     
     def _apply_theme_immediate(self):
-        """Apply current theme to all widgets immediately"""
+        """Apply current theme to all widgets immediately with optimized updates"""
+        # Disable updates during theme change to prevent partial rendering
+        self.root.configure(cursor="watch")  # Show loading cursor
+        
         # Update root window
         self.root.configure(fg_color=self.current_theme['bg_primary'])
         
         # Update main container
         self.main_container.configure(fg_color='transparent')
         
+        # Update header elements
+        if hasattr(self, 'title_label'):
+            self.title_label.configure(text_color=self.current_theme['primary'])
+        if hasattr(self, 'subtitle_label'):
+            self.subtitle_label.configure(text_color=self.current_theme['text_muted'])
+        # Demo toggle removed
+        if hasattr(self, 'dark_mode_toggle'):
+            self.dark_mode_toggle.configure(text_color=self.current_theme['text_secondary'])
+        
         # Update timer panel
         self.timer_panel.configure(
-            fg_color=self.current_theme['card_bg'],
+            fg_color=self.current_theme['bg_secondary'],
             border_color=self.current_theme['border']
         )
         
         # Update tasks panel
         self.tasks_panel.configure(
-            fg_color=self.current_theme['card_bg'],
+            fg_color=self.current_theme['bg_secondary'],
             border_color=self.current_theme['border']
+        )
+        
+        # Update tasks header
+        for widget in self.tasks_panel.winfo_children():
+            if isinstance(widget, ctk.CTkFrame):
+                for child in widget.winfo_children():
+                    if isinstance(child, ctk.CTkLabel):
+                        child.configure(text_color=self.current_theme['text_primary'])
+                    elif isinstance(child, ctk.CTkButton):
+                        child.configure(
+                            fg_color=self.current_theme['secondary'],
+                            hover_color=self.current_theme['secondary_hover']
+                        )
+        
+        # Update tasks scroll frame background and scrollbar colors to prevent dark blocks
+        self.tasks_scroll_frame.configure(
+            fg_color='transparent',
+            scrollbar_button_color=self.current_theme['text_muted'],
+            scrollbar_button_hover_color=self.current_theme['primary']
         )
         
         # Update timer display
         self.timer_display_frame.configure(
-            fg_color=self.current_theme['bg_secondary'],
+            fg_color=self.current_theme['primary'],
             border_color=self.current_theme['primary']
         )
+        
+        # Update timer label
+        self.timer_label.configure(text_color="white")
+        
+        # Update text labels in current task display
+        if hasattr(self, 'current_task_title'):
+            self.current_task_title.configure(text_color=self.current_theme['text_muted'])
+        
+        if hasattr(self, 'current_task_label'):
+            self.current_task_label.configure(text_color=self.current_theme['text_primary'])
         
         # Update buttons
         self.start_pause_btn.configure(
@@ -663,11 +747,46 @@ class FocusAssistApp:
             hover_color=self.current_theme['primary_hover']
         )
         
-        # Update task cards theme and force recreation with new theme
-        for task_card in self.task_cards:
-            task_card.theme = self.current_theme
+        # Update mode buttons with proper colors for visibility
+        for mode_name, mode_btn in self.mode_buttons.items():
+            mode_btn.configure(
+                text_color=self.current_theme['text_primary'],
+                hover_color=self.current_theme['bg_tertiary']
+            )
         
-        # Force recreation of task cards with new theme
+        # Update status bar
+        if hasattr(self, 'status_label'):
+            self.status_label.configure(text_color=self.current_theme['text_muted'])
+        
+        # Update empty state text if it exists
+        if hasattr(self, 'empty_text'):
+            self.empty_text.configure(text_color=self.current_theme['text_muted'])
+        
+        # Efficiently update task cards without full recreation
+        self._update_task_cards_theme()
+        
+        # Update timer colors if there's a current state
+        if hasattr(self, 'current_timer_state') and self.current_timer_state is not None:
+            self._update_timer_colors_immediate()
+        
+        # Restore normal cursor
+        self.root.configure(cursor="")
+    
+    def _update_task_cards_theme(self):
+        """Efficiently update task card themes without full recreation"""
+        for task_card in self.task_cards:
+            # Update task card theme
+            task_card.theme = self.current_theme
+            
+            # Update card container colors with proper border highlighting
+            task_index = self.task_cards.index(task_card)
+            is_current = (task_index == self.current_task_index)
+            
+            # Force complete color update - first destroy and recreate for theme change
+            task_card.destroy()
+            
+        # Completely recreate all task cards with new theme
+        self.task_cards.clear()
         self._recreate_task_cards()
         
     def load_sample_tasks(self):
@@ -756,24 +875,24 @@ class FocusAssistApp:
             
         if not self.tasks:
             # Show empty state
-            empty_frame = ctk.CTkFrame(self.tasks_scroll_frame, fg_color='transparent')
-            empty_frame.pack(fill='x', pady=50)
+            self.empty_state_frame = ctk.CTkFrame(self.tasks_scroll_frame, fg_color='transparent')
+            self.empty_state_frame.pack(fill='x', pady=50)
             
             empty_icon = ctk.CTkLabel(
-                empty_frame,
+                self.empty_state_frame,
                 text="📋",
                 font=ctk.CTkFont(size=48)
             )
             empty_icon.pack()
             
-            empty_text = ctk.CTkLabel(
-                empty_frame,
+            self.empty_text = ctk.CTkLabel(
+                self.empty_state_frame,
                 text="No tasks yet\nAdd your first task to get started!",
                 font=ctk.CTkFont(size=14),
                 text_color=self.current_theme['text_muted'],
                 justify='center'
             )
-            empty_text.pack(pady=(10, 0))
+            self.empty_text.pack(pady=(10, 0))
         else:
             # Create task cards
             for i, task in enumerate(self.tasks):
@@ -828,7 +947,7 @@ class FocusAssistApp:
             self.current_theme, 
             "Edit Task",
             task.title,
-            task.description,
+            task.description or "",  # Fix: Handle None description
             task.estimated_pomodoros
         )
         if dialog.result:
@@ -890,12 +1009,17 @@ class FocusAssistApp:
         self.schedule_update('current_task')
     
     def _update_current_task_immediate(self):
-        """Update the current task display immediately"""
+        """Update the current task display immediately with proper text truncation"""
         if 0 <= self.current_task_index < len(self.tasks):
             task = self.tasks[self.current_task_index]
-            self.current_task_label.configure(
-                text=f"{task.title} ({task.completed_pomodoros}/{task.estimated_pomodoros} 🍅)"
-            )
+            task_text = f"{task.title} ({task.completed_pomodoros}/{task.estimated_pomodoros} 🍅)"
+            
+            # Truncate long task titles to prevent layout issues
+            max_length = 50  # Adjust based on your font size and container width
+            if len(task_text) > max_length:
+                task_text = task_text[:max_length-3] + "..."
+            
+            self.current_task_label.configure(text=task_text)
         else:
             self.current_task_label.configure(text="Select a task to begin")
             
@@ -904,17 +1028,11 @@ class FocusAssistApp:
         if not self.tasks:
             return
             
-        # Get time settings based on demo mode
-        if self.is_demo_mode:
-            work_time = DEMO_WORK_SECONDS
-            short_break = DEMO_SHORT_BREAK_SECONDS
-            long_break = DEMO_LONG_BREAK_SECONDS
-            snapshot_interval = DEMO_SNAPSHOT_INTERVAL
-        else:
-            work_time = DEFAULT_WORK_SECONDS
-            short_break = DEFAULT_SHORT_BREAK_SECONDS
-            long_break = DEFAULT_LONG_BREAK_SECONDS
-            snapshot_interval = DEFAULT_SNAPSHOT_INTERVAL
+        # Use normal time settings (demo mode removed)
+        work_time = DEFAULT_WORK_SECONDS
+        short_break = DEFAULT_SHORT_BREAK_SECONDS
+        long_break = DEFAULT_LONG_BREAK_SECONDS
+        snapshot_interval = DEFAULT_SNAPSHOT_INTERVAL
             
         # Create timer with a copy of current tasks
         self.timer = PomodoroTimer(
@@ -947,6 +1065,11 @@ class FocusAssistApp:
             
         if not self.timer:
             self.setup_timer()
+            
+        # Fix: Add null check for timer
+        if not self.timer:
+            self.update_status("Failed to setup timer")
+            return
             
         if not self.is_timer_running:
             # Start timer
@@ -995,7 +1118,11 @@ class FocusAssistApp:
     def skip_timer(self):
         """Skip current timer interval"""
         if self.timer and self.is_timer_running:
+            # Skip the current interval
             self.timer.skip()
+            
+            # Don't update colors immediately - let the state change callback handle it
+            # This prevents the jarring red color flash since we removed SKIPPED state colors
             self.update_status("Timer interval skipped")
             
     def start_timer_thread(self):
@@ -1016,7 +1143,8 @@ class FocusAssistApp:
             remaining_time = self.timer.get_remaining_time()
             if remaining_time:
                 # Update display only if changed
-                minutes, seconds = divmod(int(remaining_time.total_seconds()), 60)
+                total_seconds = int(remaining_time.total_seconds())
+                minutes, seconds = int(total_seconds // 60), int(total_seconds % 60)
                 time_str = f"{minutes:02d}:{seconds:02d}"
                 
                 if time_str != last_time_str:
@@ -1095,8 +1223,11 @@ class FocusAssistApp:
             self.start_pause_btn.configure(text="START")
             self.update_status("All tasks completed! Ready to start new session")
             # Reset to default colors when idle
-            self.timer_label.configure(text_color=self.current_theme['primary'])
-            self.timer_frame_ref.configure(border_color=self.current_theme['primary'])
+            self.timer_label.configure(text_color="white")
+            self.timer_frame_ref.configure(
+                fg_color=self.current_theme['primary'],
+                border_color=self.current_theme['primary']
+            )
             self.start_pause_btn.configure(
                 fg_color=self.current_theme['primary'],
                 hover_color=self.current_theme['primary_hover']
@@ -1219,16 +1350,11 @@ class FocusAssistApp:
                 'secondary': '#E67E22',
                 'display_bg': '#FEF5E7',
                 'border': '#F39C12'
-            },
-            TimerState.SKIPPED: {
-                'primary': '#E74C3C',  # Red
-                'secondary': '#C0392B',
-                'display_bg': '#FADBD8',
-                'border': '#E74C3C'
             }
+            # Removed SKIPPED state colors - will default to work colors for seamless transition
         }
         
-        # Default to work colors if state not found
+        # Default to work colors if state not found (including SKIPPED)
         return state_colors.get(state, state_colors[TimerState.WORK])
     
     def update_timer_colors(self, state: TimerState):
@@ -1238,17 +1364,21 @@ class FocusAssistApp:
     
     def _update_timer_colors_immediate(self):
         """Update timer display colors based on current state immediately"""
-        if not hasattr(self, 'current_timer_state'):
+        # Fix: Add null check for current_timer_state
+        if not hasattr(self, 'current_timer_state') or self.current_timer_state is None:
             return
             
         colors = self.get_state_colors(self.current_timer_state)
         
-        # Update timer label color
-        self.timer_label.configure(text_color=colors['primary'])
+        # Update timer label color - keep white text
+        self.timer_label.configure(text_color="white")
         
-        # Update timer frame border
+        # Update timer frame background and border
         if hasattr(self, 'timer_frame_ref'):
-            self.timer_frame_ref.configure(border_color=colors['border'])
+            self.timer_frame_ref.configure(
+                fg_color=colors['primary'],
+                border_color=colors['border']
+            )
         
         # Update start/pause button color
         self.start_pause_btn.configure(
@@ -1261,6 +1391,10 @@ class FocusAssistApp:
     
     def update_mode_buttons_for_state(self, state: TimerState):
         """Update mode button highlighting based on current timer state"""
+        # Fix: Add null check for state
+        if state is None:
+            return
+            
         # Get colors for current state
         colors = self.get_state_colors(state)
         
@@ -1277,21 +1411,23 @@ class FocusAssistApp:
         if active_mode and hasattr(self, 'mode_buttons'):
             self.mode_var.set(active_mode)
             
-            # Update all mode button colors
+            # Update all mode button colors properly for radio buttons
             for mode_name, mode_btn in self.mode_buttons.items():
                 if mode_name == active_mode:
-                    # Highlight active mode
+                    # Highlight active mode with state color for selector and text - smaller bold font to prevent expansion
                     mode_btn.configure(
-                        fg_color=colors['primary'],
-                        hover_color=colors['secondary'],
-                        text_color='white'
+                        text_color=colors['primary'],
+                        font=ctk.CTkFont(size=13, weight='bold'),  # Smaller bold font to prevent expansion
+                        fg_color=colors['primary'],  # Set radio button selector color to match state
+                        hover_color=colors['secondary']
                     )
                 else:
-                    # Reset inactive modes to default
+                    # Reset inactive modes to default with proper visibility
                     mode_btn.configure(
-                        fg_color=self.current_theme['text_muted'],
-                        hover_color=self.current_theme['bg_tertiary'],
-                        text_color=self.current_theme['text_secondary']
+                        text_color=self.current_theme['text_muted'],
+                        font=ctk.CTkFont(size=14, weight='normal'),
+                        fg_color=self.current_theme['text_muted'],  # Default selector color
+                        hover_color=self.current_theme['bg_tertiary']
                     )
     
     def update_status(self, message: str):
@@ -1323,10 +1459,10 @@ class TaskDialog:
         self.result = None
         self.theme = theme
         
-        # Create dialog window
+        # Create dialog window with better sizing
         self.dialog = ctk.CTkToplevel(parent)
         self.dialog.title(title)
-        self.dialog.geometry("500x400")
+        self.dialog.geometry("550x650")  # Increased height to show buttons
         self.dialog.resizable(False, False)
         self.dialog.configure(fg_color=theme['bg_primary'])
         
@@ -1336,9 +1472,9 @@ class TaskDialog:
         
         # Center dialog
         self.dialog.update_idletasks()
-        x = (parent.winfo_screenwidth() // 2) - (500 // 2)
-        y = (parent.winfo_screenheight() // 2) - (400 // 2)
-        self.dialog.geometry(f"500x400+{x}+{y}")
+        x = (parent.winfo_screenwidth() // 2) - (550 // 2)
+        y = (parent.winfo_screenheight() // 2) - (650 // 2)
+        self.dialog.geometry(f"550x650+{x}+{y}")
         
         # Create form
         self.create_form(task_title, description, estimated_pomodoros)
@@ -1347,113 +1483,126 @@ class TaskDialog:
         self.dialog.wait_window()
         
     def create_form(self, task_title: str, description: str, estimated_pomodoros: int):
-        """Create task form"""
-        # Main frame
+        """Create task form with improved layout"""
+        # Main frame with better padding
         main_frame = ctk.CTkFrame(self.dialog, fg_color='transparent')
-        main_frame.pack(fill='both', expand=True, padx=30, pady=30)
+        main_frame.pack(fill='both', expand=True, padx=40, pady=40)
         
-        # Title
+        # Title with improved styling
         title_label = ctk.CTkLabel(
             main_frame,
             text="Task Details",
-            font=ctk.CTkFont(size=20, weight='bold'),
+            font=ctk.CTkFont(size=24, weight='bold'),
             text_color=self.theme['text_primary']
         )
-        title_label.pack(pady=(0, 20))
+        title_label.pack(pady=(0, 30))
         
-        # Task title
+        # Task title section
         title_frame = ctk.CTkFrame(main_frame, fg_color='transparent')
-        title_frame.pack(fill='x', pady=(0, 15))
+        title_frame.pack(fill='x', pady=(0, 20))
         
         title_lbl = ctk.CTkLabel(
             title_frame,
             text="Task Title *",
-            font=ctk.CTkFont(size=14, weight='bold'),
+            font=ctk.CTkFont(size=16, weight='bold'),
             text_color=self.theme['text_secondary']
         )
-        title_lbl.pack(anchor='w')
+        title_lbl.pack(anchor='w', pady=(0, 8))
         
         self.title_entry = ctk.CTkEntry(
             title_frame,
             placeholder_text="Enter task title...",
             font=ctk.CTkFont(size=14),
-            height=40
+            height=45,
+            fg_color=self.theme['card_bg'],
+            text_color=self.theme['text_primary'],
+            placeholder_text_color=self.theme['text_muted']
         )
-        self.title_entry.pack(fill='x', pady=(5, 0))
+        self.title_entry.pack(fill='x')
         self.title_entry.insert(0, task_title)
         
-        # Description
+        # Description section
         desc_frame = ctk.CTkFrame(main_frame, fg_color='transparent')
-        desc_frame.pack(fill='x', pady=(0, 15))
+        desc_frame.pack(fill='x', pady=(0, 20))
         
         desc_lbl = ctk.CTkLabel(
             desc_frame,
             text="Description (optional)",
-            font=ctk.CTkFont(size=14, weight='bold'),
+            font=ctk.CTkFont(size=16, weight='bold'),
             text_color=self.theme['text_secondary']
         )
-        desc_lbl.pack(anchor='w')
+        desc_lbl.pack(anchor='w', pady=(0, 8))
         
         self.desc_entry = ctk.CTkTextbox(
             desc_frame,
             height=80,
-            font=ctk.CTkFont(size=14)
+            font=ctk.CTkFont(size=14),
+            fg_color=self.theme['card_bg'],
+            text_color=self.theme['text_primary']
         )
-        self.desc_entry.pack(fill='x', pady=(5, 0))
+        self.desc_entry.pack(fill='x')
         self.desc_entry.insert('1.0', description)
         
-        # Estimated pomodoros
+        # Estimated pomodoros section
         pomodoros_frame = ctk.CTkFrame(main_frame, fg_color='transparent')
-        pomodoros_frame.pack(fill='x', pady=(0, 30))
+        pomodoros_frame.pack(fill='x', pady=(0, 40))
         
         pomodoros_lbl = ctk.CTkLabel(
             pomodoros_frame,
             text="Estimated Pomodoros *",
-            font=ctk.CTkFont(size=14, weight='bold'),
+            font=ctk.CTkFont(size=16, weight='bold'),
             text_color=self.theme['text_secondary']
         )
-        pomodoros_lbl.pack(anchor='w')
+        pomodoros_lbl.pack(anchor='w', pady=(0, 8))
         
         self.pomodoros_entry = ctk.CTkEntry(
             pomodoros_frame,
             placeholder_text="Enter number of pomodoros...",
             font=ctk.CTkFont(size=14),
-            height=40,
-            width=200
+            height=45,
+            width=250,
+            fg_color=self.theme['card_bg'],
+            text_color=self.theme['text_primary'],
+            placeholder_text_color=self.theme['text_muted']
         )
-        self.pomodoros_entry.pack(anchor='w', pady=(5, 0))
+        self.pomodoros_entry.pack(anchor='w')
         self.pomodoros_entry.insert(0, str(estimated_pomodoros))
         
-        # Buttons
+        # Buttons section with better layout and spacing
         buttons_frame = ctk.CTkFrame(main_frame, fg_color='transparent')
-        buttons_frame.pack(fill='x')
+        buttons_frame.pack(fill='x', pady=(40, 20))
         
-        cancel_btn = ctk.CTkButton(
-            buttons_frame,
-            text="Cancel",
-            width=100,
-            height=40,
-            font=ctk.CTkFont(size=14),
-            fg_color='transparent',
-            text_color=self.theme['text_secondary'],
-            hover_color=self.theme['bg_tertiary'],
-            border_width=2,
-            border_color=self.theme['border'],
-            command=self.cancel
-        )
-        cancel_btn.pack(side='right', padx=(10, 0))
-        
+        # Save button (primary action) - properly sized
         save_btn = ctk.CTkButton(
             buttons_frame,
-            text="Save Task",
-            width=120,
-            height=40,
-            font=ctk.CTkFont(size=14, weight='bold'),
+            text="💾 Save Task",
+            width=350,
+            height=50,
+            font=ctk.CTkFont(size=18, weight='bold'),
             fg_color=self.theme['primary'],
             hover_color=self.theme['primary_hover'],
+            text_color='white',
+            corner_radius=15,
             command=self.save
         )
-        save_btn.pack(side='right')
+        save_btn.pack(pady=(0, 15))
+        
+        # Cancel button (secondary action) - same size as save button
+        cancel_btn = ctk.CTkButton(
+            buttons_frame,
+            text="❌ Cancel",
+            width=350,
+            height=50,
+            font=ctk.CTkFont(size=18),
+            fg_color=self.theme['bg_tertiary'],
+            text_color=self.theme['text_primary'],
+            hover_color=self.theme['border'],
+            border_width=2,
+            border_color=self.theme['border'],
+            corner_radius=15,
+            command=self.cancel
+        )
+        cancel_btn.pack()
         
         # Focus on title entry
         self.title_entry.focus()
@@ -1463,22 +1612,22 @@ class TaskDialog:
         self.dialog.bind('<KP_Enter>', lambda event: self.save())
         
     def save(self):
-        """Save task"""
+        """Save task with improved validation and error handling"""
         title = self.title_entry.get().strip()
         description = self.desc_entry.get('1.0', 'end-1c').strip()
         
         try:
-            estimated_pomodoros = int(self.pomodoros_entry.get())
+            estimated_pomodoros = int(self.pomodoros_entry.get().strip())
         except ValueError:
-            messagebox.showerror("Invalid Input", "Please enter a valid number for estimated pomodoros.")
+            self.show_error("Invalid Input", "Please enter a valid number for estimated pomodoros.")
             return
             
         if not title:
-            messagebox.showerror("Invalid Input", "Please enter a task title.")
+            self.show_error("Invalid Input", "Please enter a task title.")
             return
             
         if estimated_pomodoros <= 0:
-            messagebox.showerror("Invalid Input", "Estimated pomodoros must be greater than 0.")
+            self.show_error("Invalid Input", "Estimated pomodoros must be greater than 0.")
             return
             
         self.result = {
@@ -1492,6 +1641,57 @@ class TaskDialog:
     def cancel(self):
         """Cancel dialog"""
         self.dialog.destroy()
+        
+    def show_error(self, title: str, message: str):
+        """Show error message with proper theming"""
+        # Create error dialog with current theme
+        error_dialog = ctk.CTkToplevel(self.dialog)
+        error_dialog.title(title)
+        error_dialog.geometry("400x150")
+        error_dialog.configure(fg_color=self.theme['bg_primary'])
+        error_dialog.resizable(False, False)
+        
+        # Make error dialog modal
+        error_dialog.transient(self.dialog)
+        error_dialog.grab_set()
+        
+        # Center error dialog
+        error_dialog.update_idletasks()
+        x = (self.dialog.winfo_screenwidth() // 2) - (400 // 2)
+        y = (self.dialog.winfo_screenheight() // 2) - (150 // 2)
+        error_dialog.geometry(f"400x150+{x}+{y}")
+        
+        # Error content
+        error_frame = ctk.CTkFrame(error_dialog, fg_color='transparent')
+        error_frame.pack(fill='both', expand=True, padx=20, pady=20)
+        
+        error_label = ctk.CTkLabel(
+            error_frame,
+            text=message,
+            font=ctk.CTkFont(size=14),
+            text_color=self.theme['text_primary'],
+            wraplength=350
+        )
+        error_label.pack(pady=(0, 20))
+        
+        ok_btn = ctk.CTkButton(
+            error_frame,
+            text="OK",
+            width=100,
+            height=35,
+            font=ctk.CTkFont(size=14, weight='bold'),
+            fg_color=self.theme['primary'],
+            hover_color=self.theme['primary_hover'],
+            command=error_dialog.destroy
+        )
+        ok_btn.pack()
+        
+        # Focus on OK button
+        ok_btn.focus()
+        
+        # Bind Enter key to close
+        error_dialog.bind('<Return>', lambda event: error_dialog.destroy())
+        error_dialog.bind('<KP_Enter>', lambda event: error_dialog.destroy())
 
 def main():
     """Main entry point"""
