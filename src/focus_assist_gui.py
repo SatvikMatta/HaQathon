@@ -85,6 +85,12 @@ class TaskCard(ctk.CTkFrame):
         self.on_edit_callback = on_edit_callback
         self.on_delete_callback = on_delete_callback
         
+        # Cache for widget references to optimize updates
+        self.progress_bar = None
+        self.progress_text = None
+        self.status_label = None
+        self.title_label = None
+        
         self.configure(
             fg_color=theme['card_bg'],
             corner_radius=12,
@@ -126,13 +132,13 @@ class TaskCard(ctk.CTkFrame):
             TaskStatus.PAUSED: self.theme['warning']
         }
         
-        status_label = ctk.CTkLabel(
+        self.status_label = ctk.CTkLabel(
             header,
             text=f"● {self.task.status.value.replace('_', ' ').title()}",
             font=ctk.CTkFont(size=12, weight='bold'),
             text_color=status_colors.get(self.task.status, self.theme['text_muted'])
         )
-        status_label.pack(side='right', padx=(10, 0))
+        self.status_label.pack(side='right', padx=(10, 0))
         
         # Description (if available)
         if self.task.description:
@@ -152,24 +158,24 @@ class TaskCard(ctk.CTkFrame):
         
         # Progress bar
         progress_value = self.task.completed_pomodoros / self.task.estimated_pomodoros if self.task.estimated_pomodoros > 0 else 0
-        progress_bar = ctk.CTkProgressBar(
+        self.progress_bar = ctk.CTkProgressBar(
             progress_frame,
             width=200,
             height=8,
             progress_color=self.theme['primary'],
             fg_color=self.theme['bg_tertiary']
         )
-        progress_bar.set(progress_value)
-        progress_bar.pack(side='left', fill='x', expand=True)
+        self.progress_bar.set(progress_value)
+        self.progress_bar.pack(side='left', fill='x', expand=True)
         
         # Progress text
-        progress_text = ctk.CTkLabel(
+        self.progress_text = ctk.CTkLabel(
             progress_frame,
             text=f"{self.task.completed_pomodoros}/{self.task.estimated_pomodoros} 🍅",
             font=ctk.CTkFont(size=12, weight='bold'),
             text_color=self.theme['primary']
         )
-        progress_text.pack(side='right', padx=(10, 0))
+        self.progress_text.pack(side='right', padx=(10, 0))
         
         # Actions
         actions_frame = ctk.CTkFrame(container, fg_color='transparent')
@@ -212,6 +218,37 @@ class TaskCard(ctk.CTkFrame):
         """Handle task deletion"""
         if self.on_delete_callback:
             self.on_delete_callback(self.task)
+    
+    def update_progress_only(self):
+        """Efficiently update only progress-related widgets without full recreation"""
+        if not (self.progress_bar and self.progress_text and self.status_label):
+            # Fallback to full recreation if widgets aren't cached
+            self.create_widgets()
+            return
+        
+        try:
+            # Update progress bar
+            progress_value = self.task.completed_pomodoros / self.task.estimated_pomodoros if self.task.estimated_pomodoros > 0 else 0
+            self.progress_bar.set(progress_value)
+            
+            # Update progress text
+            self.progress_text.configure(text=f"{self.task.completed_pomodoros}/{self.task.estimated_pomodoros} 🍅")
+            
+            # Update status
+            status_colors = {
+                TaskStatus.NOT_STARTED: self.theme['text_muted'],
+                TaskStatus.IN_PROGRESS: self.theme['primary'],
+                TaskStatus.COMPLETED: self.theme['success'],
+                TaskStatus.PAUSED: self.theme['warning']
+            }
+            
+            self.status_label.configure(
+                text=f"● {self.task.status.value.replace('_', ' ').title()}",
+                text_color=status_colors.get(self.task.status, self.theme['text_muted'])
+            )
+        except Exception:
+            # If any update fails, fallback to full recreation
+            self.create_widgets()
 
 class FocusAssistApp:
     """Main application class for Focus Assist"""
@@ -626,10 +663,9 @@ class FocusAssistApp:
             hover_color=self.current_theme['primary_hover']
         )
         
-        # Update task cards theme
+        # Update task cards theme and force recreation with new theme
         for task_card in self.task_cards:
             task_card.theme = self.current_theme
-            task_card.needs_content_update = True
         
         # Force recreation of task cards with new theme
         self._recreate_task_cards()
@@ -641,7 +677,7 @@ class FocusAssistApp:
                 'title': 'Complete Project Proposal',
                 'description': 'Draft and finalize the Q4 project proposal with budget estimates',
                 'estimated_pomodoros': 4,
-                'completed_pomodoros': 1
+                'completed_pomodoros': 0
             },
             {
                 'title': 'Code Review',
@@ -653,7 +689,7 @@ class FocusAssistApp:
                 'title': 'UI/UX Design',
                 'description': 'Create wireframes for the new dashboard interface',
                 'estimated_pomodoros': 3,
-                'completed_pomodoros': 2
+                'completed_pomodoros': 0
             }
         ]
         
@@ -768,9 +804,9 @@ class FocusAssistApp:
         else:
             task_card.configure(border_width=1, border_color=self.current_theme['border'])
         
-        # Update task card content (recreate widgets if needed)
-        if hasattr(task_card, 'needs_content_update'):
-            task_card.create_widgets()
+        # Efficiently update only progress-related widgets when possible
+        # Falls back to full recreation if needed
+        task_card.update_progress_only()
                 
     def add_task_dialog(self):
         """Show dialog to add new task"""
@@ -826,9 +862,11 @@ class FocusAssistApp:
                 self.schedule_update('current_task')
                 self.schedule_update('tasks')
                 
-                # If timer is running, update its task list
+                # If timer is running, need to recreate timer with new task list
                 if self.timer and self.is_timer_running:
-                    self.timer._tasks = self.tasks.copy()
+                    # Stop current timer and recreate with updated tasks
+                    self.stop_timer()
+                    self.setup_timer()
                     
                 # If all tasks deleted, reset
                 if not self.tasks:
@@ -887,14 +925,18 @@ class FocusAssistApp:
             snapshot_interval=snapshot_interval
         )
         
+        # Sync timer's current task index with GUI's selection
+        if hasattr(self.timer, '_current_task_idx'):
+            self.timer._current_task_idx = self.current_task_index
+        
         # Create terminal output
         self.terminal_output = TerminalOutput(debug=True)
         
         # Add callbacks
         self.timer.add_state_callback(self.on_timer_state_changed)
         
-        # Reset current task index to start from beginning
-        self.current_task_index = 0
+        # Sync initial state from timer
+        self.sync_tasks_from_timer()
         self.update_current_task_display()
         
     def toggle_timer(self):
@@ -912,10 +954,10 @@ class FocusAssistApp:
                 self.is_timer_running = True
                 self.start_pause_btn.configure(text="PAUSE")
                 
-                # Set first task to IN_PROGRESS
-                if 0 <= self.current_task_index < len(self.tasks):
-                    self.tasks[self.current_task_index].status = TaskStatus.IN_PROGRESS
-                    self.schedule_update('tasks')
+                # Sync task state from timer (timer updates task status internally)
+                self.sync_tasks_from_timer()
+                self.schedule_update('tasks')
+                self.schedule_update('current_task')
                 
                 # Update colors for the initial timer state
                 self.update_timer_colors(self.timer.state)
@@ -968,6 +1010,7 @@ class FocusAssistApp:
         """Main timer loop"""
         last_time_str = ""
         last_state = None
+        sync_counter = 0
         
         while self.is_timer_running and self.timer:
             remaining_time = self.timer.get_remaining_time()
@@ -984,6 +1027,12 @@ class FocusAssistApp:
                 if self.timer and self.timer.state != last_state:
                     last_state = self.timer.state
                     self.root.after(0, lambda s=last_state: self.update_timer_colors(s))
+                
+                # Periodic sync to ensure GUI stays synchronized with timer
+                sync_counter += 1
+                if sync_counter >= 10:  # Every 10 seconds
+                    sync_counter = 0
+                    self.root.after(0, self.sync_tasks_from_timer)
                 
             time.sleep(1)
             
@@ -1031,6 +1080,9 @@ class FocusAssistApp:
         state_text = state.value.replace('_', ' ').title()
         self.update_status(f"Timer state: {state_text}")
         
+        # Sync tasks from timer on every state change to keep GUI updated
+        self.sync_tasks_from_timer()
+        
         # Update colors for new state
         self.update_timer_colors(state)
         
@@ -1059,49 +1111,69 @@ class FocusAssistApp:
                 self.start_pause_btn.configure(text="PAUSE")
                 
     def on_work_session_completed(self):
-        """Handle completion of a work session (pomodoro)"""
-        if 0 <= self.current_task_index < len(self.tasks):
-            # Update the current task's completed pomodoros
-            current_task = self.tasks[self.current_task_index]
-            current_task.completed_pomodoros += 1
+        """Handle completion of a work session (pomodoro) - sync from timer"""
+        # The timer handles all task completion logic internally
+        # GUI should only sync the updated tasks from timer and update display
+        if self.timer:
+            # Sync tasks from timer (timer is the source of truth)
+            self.sync_tasks_from_timer()
             
-            # Check if task is now complete
-            if current_task.completed_pomodoros >= current_task.estimated_pomodoros:
-                current_task.status = TaskStatus.COMPLETED
-                self.update_status(f"Task '{current_task.title}' completed! 🎉")
-                
-                # Move to next incomplete task
-                self.move_to_next_task()
-            else:
-                # Update status with progress
-                self.update_status(f"Pomodoro completed! {current_task.completed_pomodoros}/{current_task.estimated_pomodoros} done")
-                
-            # Schedule batched UI updates
+            # Update UI to reflect changes
             self.schedule_update('current_task')
             self.schedule_update('tasks')
             
-            # Update timer's task list to keep in sync
-            if self.timer:
-                self.timer._tasks = self.tasks.copy()
+            # Update status with current progress
+            if 0 <= self.current_task_index < len(self.tasks):
+                current_task = self.tasks[self.current_task_index]
+                if current_task.status == TaskStatus.COMPLETED:
+                    self.update_status(f"Task '{current_task.title}' completed! 🎉")
+                else:
+                    self.update_status(f"Pomodoro completed! {current_task.completed_pomodoros}/{current_task.estimated_pomodoros} done")
+            else:
+                self.update_status("All tasks completed! 🎉")
+    
+    def sync_tasks_from_timer(self):
+        """Sync tasks and current task index from timer (timer is source of truth)"""
+        if not self.timer:
+            return
+            
+        # Get updated tasks from timer
+        updated_timer_tasks = self.timer.tasks  # This returns a copy
+        
+        # Track changes for debugging
+        changes_made = False
+        
+        # Update GUI tasks with timer tasks data
+        for i, timer_task in enumerate(updated_timer_tasks):
+            if i < len(self.tasks):
+                # Update existing task
+                gui_task = self.tasks[i]
+                if (gui_task.completed_pomodoros != timer_task.completed_pomodoros or 
+                    gui_task.status != timer_task.status):
+                    changes_made = True
+                    gui_task.completed_pomodoros = timer_task.completed_pomodoros
+                    gui_task.status = timer_task.status
+            else:
+                # This shouldn't happen if sync is correct
+                print(f"Warning: Timer has more tasks than GUI at index {i}")
+                
+        # Sync current task index from timer
+        if self.current_task_index != self.timer.current_task_idx:
+            changes_made = True
+            self.current_task_index = self.timer.current_task_idx
+            
+        # Schedule UI updates if changes were made
+        if changes_made:
+            self.schedule_update('tasks')
+            self.schedule_update('current_task')
                 
     def move_to_next_task(self):
-        """Move to the next incomplete task"""
-        # Find next incomplete task
-        for i in range(len(self.tasks)):
-            task = self.tasks[i]
-            if task.status != TaskStatus.COMPLETED:
-                self.current_task_index = i
-                task.status = TaskStatus.IN_PROGRESS
-                self.update_status(f"Starting next task: {task.title}")
-                # Schedule updates for task change
-                self.schedule_update('current_task')
-                self.schedule_update('tasks')
-                return
-                
-        # No more incomplete tasks
-        self.current_task_index = len(self.tasks)  # Beyond array bounds to indicate completion
-        self.update_status("All tasks completed! 🎉")
+        """Move to the next incomplete task - deprecated, timer handles this internally"""
+        # This method is deprecated since timer handles task transitions internally
+        # Just sync from timer to get the updated state
+        self.sync_tasks_from_timer()
         self.schedule_update('current_task')
+        self.schedule_update('tasks')
             
     def start_update_loop(self):
         """Start the GUI update loop"""
