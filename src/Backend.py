@@ -12,7 +12,7 @@ import os
 from datetime import datetime
 from typing import Dict, Any, Optional, Callable
 from PIL import ImageGrab
-from PIL import Image
+from PIL.Image import Image
             
 def get_text_from_screenshot(image: Image) -> str:
     if image is None:
@@ -23,7 +23,9 @@ def get_text_from_screenshot(image: Image) -> str:
 # Configuration
 BASE_URL = "http://localhost:3001"
 WORKSPACE_SLUG = "haqathon"
-API_TOKEN = "N0J6HM4-6DB4CAP-K6WQ0HA-SP35QZ2"
+# API_TOKEN = "N0J6HM4-6DB4CAP-K6WQ0HA-SP35QZ2"
+API_TOKEN = "EG6KWET-JB7MRZT-PEVAWQ1-PWVJ88Q"
+
 
 def classify_task(task) -> str:
     system_prompt = f"""
