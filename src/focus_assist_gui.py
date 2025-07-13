@@ -14,6 +14,8 @@ from typing import List, Optional, Dict, Any
 import json
 import os
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import queue
 # AI Imports
 from PIL import Image
 import Backend
@@ -330,6 +332,12 @@ class FocusAssistApp:
         self.is_timer_running = False
         # Demo mode removed - use normal timings
         
+        # AI Inference Thread Management
+        self.ai_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="AI_Worker")
+        self.ai_result_queue = queue.Queue()
+        self.ai_inference_active = False
+        self.ai_shutdown_event = threading.Event()
+        
         # UI optimization
         self.task_cards: List[TaskCard] = []
         self.pending_updates = set()  # Track pending updates to batch them
@@ -369,6 +377,9 @@ class FocusAssistApp:
         
         # Start update loop
         self.start_update_loop()
+        
+        # Start AI result processing loop
+        self.start_ai_result_processing()
         
         # Set initial state colors to match work mode (default)
         self.root.after(100, self._apply_initial_state_colors)
@@ -2298,35 +2309,54 @@ class FocusAssistApp:
         self.timer_thread.start()
         
     def timer_loop(self):
-        """Main timer loop"""
+        """Main timer loop - runs independently of AI inference"""
         last_time_str = ""
         last_state = None
         sync_counter = 0
         
+        # Timer loop running independently of AI inference
+        
         while self.is_timer_running and self.timer:
-            remaining_time = self.timer.get_remaining_time()
-            if remaining_time:
-                # Update display only if changed
-                total_seconds = int(remaining_time.total_seconds())
-                minutes, seconds = int(total_seconds // 60), int(total_seconds % 60)
-                time_str = f"{minutes:02d}:{seconds:02d}"
+            try:
+                remaining_time = self.timer.get_remaining_time()
+                if remaining_time:
+                    # Update display only if changed
+                    total_seconds = int(remaining_time.total_seconds())
+                    minutes, seconds = int(total_seconds // 60), int(total_seconds % 60)
+                    time_str = f"{minutes:02d}:{seconds:02d}"
+                    
+                    if time_str != last_time_str:
+                        last_time_str = time_str
+                        # Use thread-safe GUI update
+                        self.root.after(0, lambda t=time_str: self.safe_update_timer_display(t))
+                    
+                    # Update colors only if state changed
+                    if self.timer and self.timer.state != last_state:
+                        last_state = self.timer.state
+                        self.root.after(0, lambda s=last_state: self.update_timer_colors(s))
+                    
+                    # Periodic sync to ensure GUI stays synchronized with timer
+                    sync_counter += 1
+                    if sync_counter >= 10:  # Every 10 seconds
+                        sync_counter = 0
+                        self.root.after(0, self.sync_tasks_from_timer)
+                        
+                # Small sleep to prevent CPU spinning - timer continues regardless of AI
+                time.sleep(0.1)  # Reduced from 1 second for more responsive updates
                 
-                if time_str != last_time_str:
-                    last_time_str = time_str
-                    self.root.after(0, lambda t=time_str: self.timer_label.configure(text=t))
-                
-                # Update colors only if state changed
-                if self.timer and self.timer.state != last_state:
-                    last_state = self.timer.state
-                    self.root.after(0, lambda s=last_state: self.update_timer_colors(s))
-                
-                # Periodic sync to ensure GUI stays synchronized with timer
-                sync_counter += 1
-                if sync_counter >= 10:  # Every 10 seconds
-                    sync_counter = 0
-                    self.root.after(0, self.sync_tasks_from_timer)
-                
-            time.sleep(1)
+            except Exception as e:
+                print(f"⚠️ Timer loop error (continuing): {e}")
+                time.sleep(1)  # Longer sleep on error
+        
+        # Timer loop ended
+    
+    def safe_update_timer_display(self, time_str: str):
+        """Safely update timer display without blocking"""
+        try:
+            if hasattr(self, 'timer_label') and self.timer_label.winfo_exists():
+                self.timer_label.configure(text=time_str)
+        except Exception as e:
+            print(f"Timer display update error: {e}")
             
     def start_terminal_output(self):
         """Start terminal output in parallel"""
@@ -2342,7 +2372,7 @@ class FocusAssistApp:
         self.terminal_thread.start()
         
     def terminal_loop(self):
-        """Run terminal output loop"""
+        """Run terminal output loop - runs independently of AI inference"""
         if not self.terminal_output or not self.timer:
             return
             
@@ -2352,12 +2382,14 @@ class FocusAssistApp:
         self.terminal_output.print_header()
         
         try:
-            while self.timer and self.timer.state != TimerState.IDLE:
-                # Update terminal display
-                self.terminal_output.update_display(self.timer)
+            while self.timer and self.timer.state != TimerState.IDLE and self.is_timer_running:
+                # Update terminal display - this runs independently of AI inference
+                try:
+                    self.terminal_output.update_display(self.timer)
+                except Exception as e:
+                    print(f"Terminal display error: {e}")
                 
-
-                
+                # Small sleep to prevent CPU spinning - terminal continues regardless of AI
                 time.sleep(0.1)
                 
         except Exception as e:
@@ -2460,29 +2492,29 @@ class FocusAssistApp:
         return labels[best]
     
     def on_ai_snapshot_triggered(self):
-        """Handle AI snapshot intervals - placeholder for future AI integration"""
-        # TODO: Implement AI monitoring functionality here
-        # This function will be called every AI check-in interval (from settings)
-        # You can add screenshot capture, focus detection, etc. here
+        """Handle AI snapshot intervals - now runs in background thread to avoid blocking GUI"""
+        # Skip if AI inference is already running to prevent overlapping calls
+        if self.ai_inference_active:
+            return
         
+        # Skip if shutting down
+        if self.ai_shutdown_event.is_set():
+            return
+            
         if hasattr(self, 'settings'):
             interval = self.settings['ai']['checkin_interval_seconds']
             accountability_mode = self.settings['accountability']['mode']
-            print(f"🤖 AI Snapshot triggered (interval: {interval}s, mode: {accountability_mode})")
             
-            class_labels = [
-                "code",
-                "games",
-                "video"
-            ]
-            screen = Backend.screenshot()
-            clip_class = self.get_clip_inference(screenshot=screen)
-            print(clip_class)
-
-            result = get_json_screenshot(screenshot=screen, clip_input=clip_class)
-            print(result['classification'])
-        else:
-            print("🤖 AI Snapshot triggered")
+            # Mark inference as active
+            self.ai_inference_active = True
+            
+            # Submit AI inference to thread pool (non-blocking) - no verbose logging
+            try:
+                future = self.ai_executor.submit(self.run_ai_inference_async, interval, accountability_mode)
+                # Don't wait for the result - it will be processed by the queue
+            except Exception as e:
+                print(f"🤖 Failed to submit AI inference task: {e}")
+                self.ai_inference_active = False
                 
     def on_work_session_completed(self):
         """Handle completion of a work session (pomodoro) - sync from timer"""
@@ -2549,17 +2581,24 @@ class FocusAssistApp:
         
     def update_gui(self):
         """Update GUI elements"""
-        # Update stats - removed footer stats display but keep the calculation for internal use
-        total_pomodoros = sum(task.completed_pomodoros for task in self.tasks)
-        total_tasks = len(self.tasks)
-        completed_tasks = len([task for task in self.tasks if task.status == TaskStatus.COMPLETED])
-        
-        # Remove the stats label update since we removed the footer
-        # stats_text = f"📊 Tasks: {completed_tasks}/{total_tasks} | 🍅 Pomodoros: {total_pomodoros} | ⏱️ Focus Sessions: {total_pomodoros}"
-        # self.stats_label.configure(text=stats_text)
-        
-        # Schedule next update less frequently to reduce load
-        self.root.after(2000, self.update_gui)
+        try:
+            # Update stats - removed footer stats display but keep the calculation for internal use
+            total_pomodoros = sum(task.completed_pomodoros for task in self.tasks)
+            total_tasks = len(self.tasks)
+            completed_tasks = len([task for task in self.tasks if task.status == TaskStatus.COMPLETED])
+            
+            # Track last update time silently for internal monitoring
+            self._last_gui_update = time.time()
+            
+            # Remove the stats label update since we removed the footer
+            # stats_text = f"📊 Tasks: {completed_tasks}/{total_tasks} | 🍅 Pomodoros: {total_pomodoros} | ⏱️ Focus Sessions: {total_pomodoros}"
+            # self.stats_label.configure(text=stats_text)
+            
+        except Exception as e:
+            print(f"GUI update error: {e}")
+        finally:
+            # Schedule next update less frequently to reduce load
+            self.root.after(2000, self.update_gui)
         
     def get_state_colors(self, state: TimerState):
         """Get colors for timer display based on current state"""
@@ -2689,6 +2728,30 @@ class FocusAssistApp:
         if hasattr(self, 'status_label'):
             self.status_label.configure(text=message)
         
+    def cleanup_resources(self):
+        """Clean up all resources before shutdown"""
+        print("🧹 Cleaning up resources...")
+        
+        # Signal shutdown to AI processing
+        self.ai_shutdown_event.set()
+        
+        # Stop timer if running
+        if self.timer and self.is_timer_running:
+            self.is_timer_running = False
+            if self.timer:
+                self.timer.pause()
+        
+        # Shutdown AI thread pool
+        if hasattr(self, 'ai_executor'):
+            print("🤖 Shutting down AI inference threads...")
+            self.ai_executor.shutdown(wait=False)  # Don't wait for completion
+            
+        # Clean up terminal output
+        if self.terminal_output:
+            self.terminal_output.cleanup_interrupted_bar()
+            
+        print("✅ Resource cleanup complete")
+    
     def run(self):
         """Run the application"""
         try:
@@ -2697,13 +2760,113 @@ class FocusAssistApp:
             print("🎯 Modern interface with AI-powered focus detection")
             print("=" * 50)
             
+            # Set up proper cleanup on window close
+            self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+            
             self.root.mainloop()
             
         except KeyboardInterrupt:
             print("\n👋 Shutting down GUI...")
         finally:
-            if self.terminal_output:
-                self.terminal_output.cleanup_interrupted_bar()
+            self.cleanup_resources()
+            
+    def on_closing(self):
+        """Handle window closing event"""
+        print("🔄 Application closing...")
+        self.cleanup_resources()
+        self.root.destroy()
+
+    def start_ai_result_processing(self):
+        """Start AI result processing loop to handle results without blocking GUI"""
+        self.process_ai_results()
+        
+    def process_ai_results(self):
+        """Process AI inference results from the queue without blocking GUI"""
+        try:
+            # Process multiple results if available (up to 5 per cycle to avoid blocking)
+            results_processed = 0
+            while results_processed < 5:
+                try:
+                    # Non-blocking get with timeout
+                    result = self.ai_result_queue.get_nowait()
+                    self.handle_ai_result(result)
+                    results_processed += 1
+                except queue.Empty:
+                    break
+        except Exception as e:
+            print(f"AI result processing error: {e}")
+        finally:
+            # Schedule next processing cycle
+            if not self.ai_shutdown_event.is_set():
+                self.root.after(100, self.process_ai_results)  # Check every 100ms
+    
+    def handle_ai_result(self, result: Dict[str, Any]):
+        """Handle a single AI inference result"""
+        try:
+            if 'error' in result:
+                print(f"🤖 AI Inference error: {result['error']}")
+                return
+            
+            # Process successful result
+            clip_class = result.get('clip_class', 'unknown')
+            classification = result.get('classification', {})
+            processing_time = result.get('processing_time', 0)
+            
+            # Only print essential AI results - keep it minimal to avoid breaking progress bar
+            print(f"📊 CLIP: {clip_class}")
+            if classification:
+                print(f"📋 OCR: {classification}")
+            
+            # Update GUI status if needed (non-blocking)
+            if hasattr(self, 'update_status'):
+                self.update_status(f"AI Analysis: {clip_class} detected ({processing_time:.1f}s)")
+                
+        except Exception as e:
+            print(f"AI result handling error: {e}")
+    
+    def run_ai_inference_async(self, interval: int, accountability_mode: str):
+        """Run AI inference in background thread"""
+        start_time = time.time()
+        thread_name = threading.current_thread().name
+        
+        try:
+            # Take screenshot
+            screen = Backend.screenshot()
+            
+            # Run CLIP inference
+            clip_class = self.get_clip_inference(screenshot=screen)
+            
+            # Run OCR analysis
+            ocr_result = get_json_screenshot(screenshot=screen, clip_input=clip_class)
+            
+            # Prepare result
+            result = {
+                'interval': interval,
+                'accountability_mode': accountability_mode,
+                'clip_class': clip_class,
+                'classification': ocr_result.get('classification', {}),
+                'timestamp': time.time(),
+                'thread_name': thread_name,
+                'processing_time': time.time() - start_time
+            }
+            
+            # Put result in queue for GUI thread to process
+            self.ai_result_queue.put(result)
+            
+        except Exception as e:
+            processing_time = time.time() - start_time
+            
+            # Put error in queue
+            error_result = {
+                'error': str(e),
+                'timestamp': time.time(),
+                'thread_name': thread_name,
+                'processing_time': processing_time
+            }
+            self.ai_result_queue.put(error_result)
+        finally:
+            # Mark inference as no longer active
+            self.ai_inference_active = False
 
 class TaskDialog:
     """Dialog for adding/editing tasks"""
@@ -2960,7 +3123,7 @@ def init_clip() -> None:
     session   = get_model()          # your helper
     tokenizer = get_tokenizer()      # your helper
 
-    # 2. take an initial screenshot (Pillow’s ImageGrab)
+    # 2. take an initial screenshot (Pillow's ImageGrab)
     pil_shot  = ImageGrab.grab()
 
     # 3. cache ONNX input/output names
