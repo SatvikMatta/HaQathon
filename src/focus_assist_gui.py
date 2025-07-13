@@ -483,8 +483,12 @@ class FocusAssistApp:
         controls_frame = ctk.CTkFrame(timer_content, fg_color='transparent')
         controls_frame.grid(row=3, column=0, sticky='ew')
         
+        # Center the buttons by using a wrapper frame
+        button_container = ctk.CTkFrame(controls_frame, fg_color='transparent')
+        button_container.pack(expand=True)
+        
         self.start_pause_btn = ctk.CTkButton(
-            controls_frame,
+            button_container,
             text="START",
             width=120,
             height=50,
@@ -497,7 +501,7 @@ class FocusAssistApp:
         self.start_pause_btn.pack(side='left', padx=(0, 10))
         
         self.stop_btn = ctk.CTkButton(
-            controls_frame,
+            button_container,
             text="STOP",
             width=80,
             height=50,
@@ -513,7 +517,7 @@ class FocusAssistApp:
         self.stop_btn.pack(side='left', padx=(0, 10))
         
         self.skip_btn = ctk.CTkButton(
-            controls_frame,
+            button_container,
             text="SKIP",
             width=80,
             height=50,
@@ -1116,6 +1120,13 @@ class FocusAssistApp:
             self.timer = None
             self.start_pause_btn.configure(text="START")
             self.timer_label.configure(text="25:00")
+            
+            # Reset to default work mode colors
+            self.current_timer_state = TimerState.WORK
+            self.last_active_state = TimerState.WORK
+            self.update_mode_buttons_for_state(TimerState.WORK)
+            self._update_timer_colors_immediate()
+            
             self.update_status("Timer stopped")
             
     def skip_timer(self):
