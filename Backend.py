@@ -10,11 +10,9 @@ import time
 import sys
 import os
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Callable
 from PIL import ImageGrab
 from PIL import Image
-
-
             
 def get_text_from_screenshot(image: Image) -> str:
     if image is None:
@@ -165,8 +163,7 @@ Respond in this exact JSON format:
 
 # List of focus
 
-
-def get_json_screenshot():
+def get_json_screenshot(clip: str):
     screenshot = ImageGrab.grab()
     screenshot_text = get_text_from_screenshot(screenshot)
     return classify_activity_from_text(extracted_text=screenshot_text)
@@ -176,3 +173,5 @@ def get_json_task(given_task: str):
         return None
     task_class = classify_task(task=given_task)
     return task_class
+
+
