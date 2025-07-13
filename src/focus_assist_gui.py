@@ -14,6 +14,7 @@ from typing import List, Optional, Dict, Any
 import json
 import os
 import sys
+from PIL import Image
 
 # Add src directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -302,6 +303,9 @@ class FocusAssistApp:
         self.root.grid_columnconfigure(0, weight=1)
         self.root.grid_rowconfigure(0, weight=1)
         
+        # Load logo
+        self.load_logo()
+        
         # Create UI
         self.create_main_interface()
         self.apply_theme()
@@ -319,6 +323,31 @@ class FocusAssistApp:
         # Set initial state colors to match work mode (default)
         self.root.after(100, self._apply_initial_state_colors)
         
+    def load_logo(self):
+        """Load the Focus Assist logo"""
+        try:
+            # Get the logo path relative to the src directory
+            logo_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logo", "Focus_Assist.png")
+            
+            if os.path.exists(logo_path):
+                # Load and resize the image
+                pil_image = Image.open(logo_path)
+                # Resize to fit nicely in the header (28x28 pixels)
+                pil_image = pil_image.resize((28, 28), Image.Resampling.LANCZOS)
+                
+                # Create CTkImage
+                self.logo_image = ctk.CTkImage(
+                    light_image=pil_image,
+                    dark_image=pil_image,
+                    size=(28, 28)
+                )
+            else:
+                print(f"Logo not found at: {logo_path}")
+                self.logo_image = None
+        except Exception as e:
+            print(f"Error loading logo: {e}")
+            self.logo_image = None
+        
     def _apply_initial_state_colors(self):
         """Apply initial state colors to match work mode"""
         # Set initial timer state and update colors
@@ -331,52 +360,86 @@ class FocusAssistApp:
         # Main container
         self.main_container = ctk.CTkFrame(self.root, fg_color='transparent')
         self.main_container.grid(row=0, column=0, sticky='nsew', padx=20, pady=20)
-        self.main_container.grid_columnconfigure(1, weight=1)
+        self.main_container.grid_columnconfigure(0, weight=1)
         self.main_container.grid_rowconfigure(1, weight=1)
+        self.main_container.grid_rowconfigure(2, weight=0)  # Status bar - no expansion
         
         # Header
         self.create_header()
         
-        # Main content area
+        # Main content area with tabs
         self.create_main_content()
-        
-        # Footer - REMOVED per user request
-        # self.create_footer()
         
         # Status bar
         self.create_status_bar()
         
     def create_header(self):
-        """Create application header"""
-        header_frame = ctk.CTkFrame(self.main_container, fg_color='transparent')
-        header_frame.grid(row=0, column=0, columnspan=2, sticky='ew', pady=(0, 20))
-        header_frame.grid_columnconfigure(1, weight=1)
+        """Create application header with integrated tabs"""
+        # Main header container with background
+        header_container = ctk.CTkFrame(
+            self.main_container,
+            fg_color=self.current_theme['bg_secondary'],
+            corner_radius=16,
+            border_width=1,
+            border_color=self.current_theme['border'],
+            height=110
+        )
+        header_container.grid(row=0, column=0, sticky='ew', pady=(0, 10))
+        header_container.grid_columnconfigure(1, weight=1)
+        header_container.grid_propagate(False)  # Maintain fixed height
+        
+        # Top row - Title and controls
+        top_row = ctk.CTkFrame(header_container, fg_color='transparent')
+        top_row.grid(row=0, column=0, columnspan=2, sticky='ew', padx=25, pady=(12, 8))
+        top_row.grid_columnconfigure(1, weight=1)
         
         # Logo and title
-        title_frame = ctk.CTkFrame(header_frame, fg_color='transparent')
+        title_frame = ctk.CTkFrame(top_row, fg_color='transparent')
         title_frame.grid(row=0, column=0, sticky='w')
         
+        # Logo image (if available)
+        if hasattr(self, 'logo_image') and self.logo_image is not None:
+            self.logo_label = ctk.CTkLabel(
+                title_frame,
+                image=self.logo_image,
+                text=""
+            )
+            self.logo_label.pack(side='left', padx=(0, 8))
+        
+        # Title text container
+        title_text_frame = ctk.CTkFrame(title_frame, fg_color='transparent')
+        title_text_frame.pack(side='left')
+        
         self.title_label = ctk.CTkLabel(
-            title_frame,
-            text="🎯 Focus Assist",
-            font=ctk.CTkFont(size=28, weight='bold'),
+            title_text_frame,
+            text="Focus Assist",
+            font=ctk.CTkFont(size=26, weight='bold'),
             text_color=self.current_theme['primary']
         )
-        self.title_label.pack(side='left')
-        
-        self.subtitle_label = ctk.CTkLabel(
-            title_frame,
-            text="AI-Powered Productivity Timer",
-            font=ctk.CTkFont(size=14),
-            text_color=self.current_theme['text_muted']
-        )
-        self.subtitle_label.pack(side='left', padx=(15, 0))
+        self.title_label.pack(anchor='w')
         
         # Controls
-        controls_frame = ctk.CTkFrame(header_frame, fg_color='transparent')
+        controls_frame = ctk.CTkFrame(top_row, fg_color='transparent')
         controls_frame.grid(row=0, column=1, sticky='e')
         
-        # Dark mode toggle
+        # Settings button with icon
+        self.settings_button = ctk.CTkButton(
+            controls_frame,
+            text="⚙️ Settings",
+            width=95,
+            height=30,
+            font=ctk.CTkFont(size=11, weight='bold'),
+            fg_color='transparent',
+            hover_color=self.current_theme['bg_tertiary'],
+            text_color=self.current_theme['text_secondary'],
+            border_width=1,
+            border_color=self.current_theme['border'],
+            corner_radius=8,
+            command=lambda: self.switch_tab("Settings")
+        )
+        self.settings_button.pack(side='left', padx=(0, 12))
+        
+        # Simplified dark mode toggle without icons
         self.dark_mode_var = ctk.BooleanVar(value=self.is_dark_mode)
         self.dark_mode_toggle = ctk.CTkSwitch(
             controls_frame,
@@ -388,24 +451,196 @@ class FocusAssistApp:
         )
         self.dark_mode_toggle.pack(side='left')
         
-    def create_main_content(self):
-        """Create main content area"""
-        # Left panel - Timer
-        self.create_timer_panel()
+        # Bottom row - Navigation tabs
+        self.nav_frame = ctk.CTkFrame(header_container, fg_color='transparent')
+        self.nav_frame.grid(row=1, column=0, columnspan=2, sticky='ew', padx=25, pady=(0, 15))
         
-        # Right panel - Tasks
+        # Create integrated tab buttons
+        self.create_navigation_tabs()
+        
+    def create_navigation_tabs(self):
+        """Create navigation tabs integrated into header"""
+        # Tab buttons container
+        tabs_container = ctk.CTkFrame(self.nav_frame, fg_color='transparent')
+        tabs_container.pack(side='left')
+        
+        # Create custom tab buttons (only Timer and Stats, Settings is in top-right)
+        self.nav_buttons = {}
+        self.current_tab = "Timer"
+        
+        tab_names = ["Timer", "Stats"]
+        for i, tab_name in enumerate(tab_names):
+            button = ctk.CTkButton(
+                tabs_container,
+                text=tab_name,
+                width=120,
+                height=36,
+                font=ctk.CTkFont(size=14, weight='bold'),
+                corner_radius=12,
+                command=lambda name=tab_name: self.switch_tab(name)
+            )
+            button.pack(side='left', padx=(0, 10) if i < len(tab_names) - 1 else (0, 0))
+            self.nav_buttons[tab_name] = button
+            
+        # Update button styles for initial state
+        self.update_tab_buttons()
+        
+    def switch_tab(self, tab_name):
+        """Switch to the specified tab"""
+        if tab_name == self.current_tab:
+            return
+            
+        self.current_tab = tab_name
+        self.update_tab_buttons()
+        
+        # Hide all content frames
+        if hasattr(self, 'timer_content'):
+            self.timer_content.grid_remove()
+        if hasattr(self, 'stats_content'):
+            self.stats_content.grid_remove()
+        if hasattr(self, 'settings_content'):
+            self.settings_content.grid_remove()
+            
+        # Show selected content
+        if tab_name == "Timer":
+            self.timer_content.grid(row=0, column=0, sticky='nsew', padx=20, pady=10)
+        elif tab_name == "Stats":
+            self.stats_content.grid(row=0, column=0, sticky='nsew', padx=20, pady=10)
+        elif tab_name == "Settings":
+            self.settings_content.grid(row=0, column=0, sticky='nsew', padx=20, pady=10)
+            
+    def update_tab_buttons(self):
+        """Update tab button styles based on current selection"""
+        # Update main navigation buttons (Timer, Stats)
+        for tab_name, button in self.nav_buttons.items():
+            if tab_name == self.current_tab:
+                # Active tab
+                button.configure(
+                    fg_color=self.current_theme['primary'],
+                    hover_color=self.current_theme['primary_hover'],
+                    text_color="white"
+                )
+            else:
+                # Inactive tab
+                button.configure(
+                    fg_color='transparent',
+                    hover_color=self.current_theme['bg_tertiary'],
+                    text_color=self.current_theme['text_secondary'],
+                    border_width=1,
+                    border_color=self.current_theme['border']
+                )
+        
+        # Update settings button in top-right
+        if hasattr(self, 'settings_button'):
+            if self.current_tab == "Settings":
+                # Active settings
+                self.settings_button.configure(
+                    fg_color=self.current_theme['primary'],
+                    hover_color=self.current_theme['primary_hover'],
+                    text_color="white",
+                    border_width=0
+                )
+            else:
+                # Inactive settings
+                self.settings_button.configure(
+                    fg_color='transparent',
+                    hover_color=self.current_theme['bg_tertiary'],
+                    text_color=self.current_theme['text_secondary'],
+                    border_width=1,
+                    border_color=self.current_theme['border']
+                )
+        
+    def create_main_content(self):
+        """Create main content area with custom tab content"""
+        # Create main content container with less bottom padding
+        self.content_container = ctk.CTkFrame(self.main_container, fg_color='transparent')
+        self.content_container.grid(row=1, column=0, sticky='nsew', pady=(0, 5))
+        self.content_container.grid_columnconfigure(0, weight=1)
+        self.content_container.grid_rowconfigure(0, weight=1)
+        
+        # Create individual content frames
+        self.create_timer_content()
+        self.create_stats_content()
+        self.create_settings_content()
+        
+        # Show timer content by default
+        self.timer_content.grid(row=0, column=0, sticky='nsew', padx=20, pady=10)
+        
+    def create_timer_content(self):
+        """Create content for the Timer tab"""
+        # Create timer content frame
+        self.timer_content = ctk.CTkFrame(self.content_container, fg_color='transparent')
+        self.timer_content.grid_columnconfigure(1, weight=1)
+        self.timer_content.grid_rowconfigure(0, weight=1)
+        
+        # Create timer and tasks panels within the timer content
+        self.create_timer_panel()
         self.create_tasks_panel()
         
-    def create_timer_panel(self):
-        """Create timer panel"""
-        self.timer_panel = ctk.CTkFrame(
-            self.main_container,
+    def create_stats_content(self):
+        """Create content for the Stats tab"""
+        # Create stats content frame
+        self.stats_content = ctk.CTkFrame(self.content_container, fg_color='transparent')
+        self.stats_content.grid_columnconfigure(0, weight=1)
+        self.stats_content.grid_rowconfigure(0, weight=1)
+        
+        # Placeholder content for stats tab
+        stats_frame = ctk.CTkFrame(
+            self.stats_content,
             fg_color=self.current_theme['bg_secondary'],
             corner_radius=16,
             border_width=1,
             border_color=self.current_theme['border']
         )
-        self.timer_panel.grid(row=1, column=0, sticky='nsew', padx=(0, 10))
+        stats_frame.grid(row=0, column=0, sticky='nsew')
+        
+        # Coming soon message
+        coming_soon_label = ctk.CTkLabel(
+            stats_frame,
+            text="📊 Focus Analytics & Timeline\n\nComing Soon!\n\nThis tab will show:\n• Focus session history\n• Productivity metrics\n• Distraction patterns\n• Daily/weekly statistics",
+            font=ctk.CTkFont(size=16),
+            text_color=self.current_theme['text_primary'],
+            justify='center'
+        )
+        coming_soon_label.pack(expand=True, pady=50)
+        
+    def create_settings_content(self):
+        """Create content for the Settings tab"""
+        # Create settings content frame
+        self.settings_content = ctk.CTkFrame(self.content_container, fg_color='transparent')
+        self.settings_content.grid_columnconfigure(0, weight=1)
+        self.settings_content.grid_rowconfigure(0, weight=1)
+        
+        # Placeholder content for settings tab
+        settings_frame = ctk.CTkFrame(
+            self.settings_content,
+            fg_color=self.current_theme['bg_secondary'],
+            corner_radius=16,
+            border_width=1,
+            border_color=self.current_theme['border']
+        )
+        settings_frame.grid(row=0, column=0, sticky='nsew')
+        
+        # Coming soon message
+        coming_soon_label = ctk.CTkLabel(
+            settings_frame,
+            text="⚙️ Settings & Configuration\n\nComing Soon!\n\nThis tab will include:\n• Timer duration settings\n• AI monitoring intervals\n• Focus thresholds\n• Notification preferences",
+            font=ctk.CTkFont(size=16),
+            text_color=self.current_theme['text_primary'],
+            justify='center'
+        )
+        coming_soon_label.pack(expand=True, pady=50)
+        
+    def create_timer_panel(self):
+        """Create timer panel"""
+        self.timer_panel = ctk.CTkFrame(
+            self.timer_content,
+            fg_color=self.current_theme['bg_secondary'],
+            corner_radius=16,
+            border_width=1,
+            border_color=self.current_theme['border']
+        )
+        self.timer_panel.grid(row=0, column=0, sticky='nsew', padx=(0, 10))
         self.timer_panel.grid_columnconfigure(0, weight=1)
         
         # Timer content
@@ -535,13 +770,13 @@ class FocusAssistApp:
     def create_tasks_panel(self):
         """Create tasks panel"""
         self.tasks_panel = ctk.CTkFrame(
-            self.main_container,
+            self.timer_content,
             fg_color=self.current_theme['bg_secondary'],
             corner_radius=16,
             border_width=1,
             border_color=self.current_theme['border']
         )
-        self.tasks_panel.grid(row=1, column=1, sticky='nsew', padx=(10, 0))
+        self.tasks_panel.grid(row=0, column=1, sticky='nsew', padx=(10, 0))
         self.tasks_panel.grid_columnconfigure(0, weight=1)
         self.tasks_panel.grid_rowconfigure(1, weight=1)
         
@@ -624,14 +859,14 @@ class FocusAssistApp:
 
     def create_status_bar(self):
         """Create application status bar"""
-        # Changed row from 3 to 2 since we removed the footer
+        # Row 2 for tabs, so status bar is row 3 - reduce padding
         status_frame = ctk.CTkFrame(self.main_container, fg_color='transparent')
-        status_frame.grid(row=2, column=0, columnspan=2, sticky='ew', pady=(10, 0))
+        status_frame.grid(row=2, column=0, sticky='ew', pady=(5, 0))
         
         self.status_label = ctk.CTkLabel(
             status_frame,
             text="Ready to start - Terminal output will run in background",
-            font=ctk.CTkFont(size=12),
+            font=ctk.CTkFont(size=11),
             text_color=self.current_theme['text_muted']
         )
         self.status_label.pack()
@@ -691,14 +926,46 @@ class FocusAssistApp:
         # Update main container
         self.main_container.configure(fg_color='transparent')
         
+        # Update header container
+        if hasattr(self, 'header_container'):
+            # Find and update the header container
+            for child in self.main_container.winfo_children():
+                if isinstance(child, ctk.CTkFrame) and child.winfo_height() > 100:  # Likely the header
+                    child.configure(
+                        fg_color=self.current_theme['bg_secondary'],
+                        border_color=self.current_theme['border']
+                    )
+                    break
+        
         # Update header elements
         if hasattr(self, 'title_label'):
             self.title_label.configure(text_color=self.current_theme['primary'])
-        if hasattr(self, 'subtitle_label'):
-            self.subtitle_label.configure(text_color=self.current_theme['text_muted'])
-        # Demo toggle removed
+        # Update dark mode toggle (no icons)
         if hasattr(self, 'dark_mode_toggle'):
-            self.dark_mode_toggle.configure(text_color=self.current_theme['text_secondary'])
+            self.dark_mode_toggle.configure(
+                text="Dark Mode",
+                text_color=self.current_theme['text_secondary']
+            )
+        
+        # Update navigation tabs and settings button
+        if hasattr(self, 'nav_buttons'):
+            self.update_tab_buttons()
+        
+        # Update settings button theme
+        if hasattr(self, 'settings_button'):
+            if self.current_tab == "Settings":
+                self.settings_button.configure(
+                    fg_color=self.current_theme['primary'],
+                    hover_color=self.current_theme['primary_hover'],
+                    text_color="white"
+                )
+            else:
+                self.settings_button.configure(
+                    fg_color='transparent',
+                    hover_color=self.current_theme['bg_tertiary'],
+                    text_color=self.current_theme['text_secondary'],
+                    border_color=self.current_theme['border']
+                )
         
         # Update timer panel
         self.timer_panel.configure(
@@ -947,6 +1214,16 @@ class FocusAssistApp:
                 estimated_pomodoros=dialog.result['estimated_pomodoros']
             )
             self.tasks.append(task)
+            
+            # If timer is running, update the timer's task list
+            if self.timer and self.is_timer_running:
+                # Update the timer's task list with the new task
+                with self.timer._lock:
+                    self.timer._tasks = self.tasks.copy()
+                self.update_status(f"Added task '{task.title}' to active timer session")
+            else:
+                self.update_status(f"Added task '{task.title}'")
+            
             self.schedule_update('tasks')
             
     def edit_task(self, task: Task):
@@ -963,6 +1240,16 @@ class FocusAssistApp:
             task.title = dialog.result['title']
             task.description = dialog.result['description']
             task.estimated_pomodoros = dialog.result['estimated_pomodoros']
+            
+            # If timer is running, update the timer's task list
+            if self.timer and self.is_timer_running:
+                # Update the timer's task list with the edited task
+                with self.timer._lock:
+                    self.timer._tasks = self.tasks.copy()
+                self.update_status(f"Updated task '{task.title}' in active timer session")
+            else:
+                self.update_status(f"Updated task '{task.title}'")
+            
             self.schedule_update('tasks')
             self.schedule_update('current_task')  # Update current task display
             
@@ -990,15 +1277,23 @@ class FocusAssistApp:
                 self.schedule_update('current_task')
                 self.schedule_update('tasks')
                 
-                # If timer is running, need to recreate timer with new task list
+                # If timer is running, update the timer's task list
                 if self.timer and self.is_timer_running:
-                    # Stop current timer and recreate with updated tasks
-                    self.stop_timer()
-                    self.setup_timer()
+                    # Update the timer's task list with the updated tasks
+                    with self.timer._lock:
+                        self.timer._tasks = self.tasks.copy()
+                        # Update the timer's current task index if needed
+                        if self.timer._current_task_idx >= len(self.tasks):
+                            self.timer._current_task_idx = max(0, len(self.tasks) - 1)
+                        elif self.timer._current_task_idx != self.current_task_index:
+                            self.timer._current_task_idx = self.current_task_index
                     
-                # If all tasks deleted, reset
+                # If all tasks deleted, reset and stop timer
                 if not self.tasks:
                     self.current_task_index = 0
+                    # Stop the timer if it's running since there are no tasks
+                    if self.timer and self.is_timer_running:
+                        self.stop_timer()
                     
                 self.update_status(f"Task '{task.title}' deleted")
                 
@@ -1070,6 +1365,7 @@ class FocusAssistApp:
             messagebox.showwarning("No Tasks", "Please add at least one task before starting the timer.")
             return
             
+        # Setup timer if it doesn't exist or if it was cleared after completion
         if not self.timer:
             self.setup_timer()
             
@@ -1270,19 +1566,25 @@ class FocusAssistApp:
             self.on_work_session_completed()
         
         if state == TimerState.IDLE:
+            # All tasks completed - reset timer but keep it ready for new tasks
             self.is_timer_running = False
+            
+            # Stop the timer but don't destroy it - we'll recreate it when needed
+            if self.timer:
+                self.timer.pause()  # Stop the timer
+                self.timer = None  # Clear the timer to force recreation on next start
+            
+            # Reset UI elements
             self.start_pause_btn.configure(text="START")
-            self.update_status("All tasks completed! Ready to start new session")
-            # Reset to default colors when idle
-            self.timer_label.configure(text_color="white")
-            self.timer_frame_ref.configure(
-                fg_color=self.current_theme['primary'],
-                border_color=self.current_theme['primary']
-            )
-            self.start_pause_btn.configure(
-                fg_color=self.current_theme['primary'],
-                hover_color=self.current_theme['primary_hover']
-            )
+            self.timer_label.configure(text="25:00")
+            
+            # Reset to default work mode colors and state
+            self.current_timer_state = TimerState.WORK
+            self.last_active_state = TimerState.WORK
+            self.update_mode_buttons_for_state(TimerState.WORK)
+            self._update_timer_colors_immediate()
+            
+            self.update_status("All tasks completed! Timer reset and ready to start new session 🎉")
         elif state == TimerState.PAUSED:
             # Update button text when paused via timer callback
             if hasattr(self, 'start_pause_btn'):

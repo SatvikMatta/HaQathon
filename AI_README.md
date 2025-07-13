@@ -2,15 +2,31 @@
 
 ## 🎯 Project Overview
 
-**Focus Assist** is a modern Pomodoro timer application with a clean GUI built using CustomTkinter. The project has been **cleaned of AI focus detection features** and now focuses on core Pomodoro functionality with task management.
+**Focus Assist** is a modern Pomodoro timer application designed for the **Qualcomm Snapdragon X Elite hackathon** with local AI-powered focus detection capabilities. The project currently has a fully functional Pomodoro timer foundation with plans to integrate AI focus monitoring features.
 
-### Current State (Post-Cleanup)
+### 🏆 Hackathon Vision
+The core concept is an AI-enhanced productivity timer that helps users maintain focus by:
+1. **Screenshot Analysis**: Taking periodic screenshots to perform OCR and use models like OpenAI CLIP to detect if screen content relates to specified tasks
+2. **Webcam Monitoring**: Using pose estimation to check if users are looking at their laptop, detect phone usage, or other distractions
+3. **Focus Analytics**: Providing detailed stats and logging to show when users got distracted and what they were doing
+4. **Local AI Only**: All AI models run locally on Snapdragon X Elite NPU - no internet APIs allowed
+
+### Current State (Phase 1 Complete)
 - ✅ **Fully functional** Pomodoro timer with GUI
 - ✅ **Task management system** with CRUD operations
-- ✅ **Modern UI** with dark/light themes
+- ✅ **Modern UI** with dark/light themes and responsive design
+- ✅ **Radio button mode switching** - click Work/Break buttons to instantly switch timer states
+- ✅ **Thread-safe architecture** with proper state management
+- ✅ **Visual feedback system** with color-coded states and smooth transitions
 - ✅ **Terminal output integration** for cross-reference
-- ✅ **Thread-safe architecture** ready for future enhancements
-- ❌ **AI focus detection removed** (was not ready for production)
+- 🔄 **AI focus detection** - ready for integration (Phase 2)
+
+### 🎯 Next Goals (Phase 2)
+- **Multiple GUI tabs** for settings and timeline stats
+- **Settings tab** for configuring AI monitoring intervals, timer durations, and thresholds
+- **Timeline/Stats tab** for detailed focus analytics and distraction logging
+- **AI integration** with screenshot OCR and webcam pose estimation
+- **Focus scoring system** with distraction detection and reporting
 
 ## 📁 File Structure & Hierarchy
 
@@ -42,14 +58,17 @@ HaQathon/
   - Task progress tracking
   - State callbacks for GUI integration
   - Pause/resume/skip functionality
+  - **Radio button integration** - skip to specific states on command
 
 ```python
 class PomodoroTimer:
     # States: WORK, SHORT_BREAK, LONG_BREAK, PAUSED, SKIPPED, IDLE
-    def start() -> bool          # Start/resume timer
-    def pause() -> bool          # Pause current interval
-    def skip() -> bool           # Skip current interval
-    def get_remaining_time()     # Get time left in current interval
+    def start() -> bool              # Start/resume timer
+    def pause() -> bool              # Pause current interval
+    def skip() -> bool               # Skip current interval
+    def skip_to_state(state) -> bool # Skip to specific state (NEW)
+    def get_remaining_time()         # Get time left in current interval
+    def _handle_interval_completion() # Uses target state for proper transitions
 ```
 
 #### 2. **Task Management** (`src/pomodoro/timer.py`)
@@ -71,6 +90,9 @@ class Task(BaseModel):           # Pydantic model for validation
   - Task CRUD operations
   - Real-time timer display
   - Threaded timer integration
+  - **Interactive radio buttons** - click to instantly switch timer modes
+  - **Visual state feedback** - color-coded states with smooth transitions
+  - **Paused state preservation** - maintains pause state when switching modes
 
 ### GUI Layout (Based on Screenshot)
 
@@ -111,6 +133,11 @@ app.toggle_timer()                   # Start/pause via GUI
 timer.start()                        # Backend timer starts
 timer.add_state_callback(callback)   # GUI receives state updates
 app.sync_tasks_from_timer()          # Keep task progress in sync
+
+# Radio button mode switching (NEW)
+app.on_mode_button_clicked(mode)     # User clicks Work/Break radio button
+timer.skip_to_state(target_state)    # Skip to selected state
+app.update_mode_buttons_for_state()  # Update visual feedback
 ```
 
 ### 2. **Task Management**
@@ -237,21 +264,59 @@ Theme.DARK = {
 
 ## 📝 Notes for Future Development
 
-### Removed Features
-- **AI Focus Detection**: All `focus_detector.py` related code removed
-- **Snapshot System**: Timer snapshot callbacks removed
-- **FocusTimerSession**: AI-integrated session management removed
+### 🚀 Development Roadmap
 
-### Ready for Enhancement
-- **Plugin Architecture**: Timer callback system ready for extensions
-- **Data Persistence**: Task system ready for database integration
-- **Advanced Analytics**: Timer state tracking ready for metrics
-- **Notification System**: State callbacks ready for alerts
+#### Phase 2: Multi-Tab GUI Enhancement
+- **Settings Tab**: Configure timer durations, AI monitoring intervals, focus thresholds
+- **Timeline/Stats Tab**: Visual analytics showing focus patterns, distraction events, productivity metrics
+- **Enhanced task management**: Categories, priority levels, time estimates vs actual
+- **Export functionality**: Focus reports, productivity summaries
+
+#### Phase 3: AI Integration (Hackathon Core)
+- **Screenshot OCR**: Periodic screen capture with text extraction and task relevance analysis
+- **CLIP Model Integration**: Use OpenAI CLIP or Qualcomm-optimized models for screen content understanding
+- **Webcam Pose Estimation**: Real-time detection of user attention and distraction indicators
+- **Focus Scoring Algorithm**: Combine multiple AI signals into focus quality metrics
+- **Distraction Logging**: Detailed timeline of focus breaks with context
+
+#### Phase 4: Advanced Analytics
+- **Machine Learning Models**: Local training on user patterns for personalized focus insights
+- **Prediction System**: Anticipate focus breaks and suggest optimal break timing
+- **Adaptive Timers**: Adjust work/break durations based on individual focus patterns
+- **Gamification**: Focus streaks, achievements, and productivity challenges
+
+### Architecture Ready for Enhancement
+- **Callback System**: Timer state callbacks ready for AI event triggers
+- **Thread-Safe Design**: Ready for parallel AI processing threads
+- **State Management**: Comprehensive state tracking for AI analysis
+- **Visual Feedback**: Color-coded system expandable for AI alerts
+- **Data Persistence**: Task system ready for focus metrics storage
 
 ### Testing Strategy
 - Use `example.py` for basic timer functionality
 - Test GUI with sample tasks (already loaded)
 - Theme switching should be seamless
 - Timer state transitions should be smooth
+- **Radio button testing**: Click mode buttons during different timer states
+- **Pause state preservation**: Verify paused state maintained when switching modes
 
-This README provides the foundation for any AI model to quickly understand and work with the Focus Assist codebase. The architecture is clean, well-structured, and ready for future enhancements. 
+## 🎯 Current Development Status
+
+**Phase 1 Complete** ✅
+- Core Pomodoro timer functionality with full GUI
+- Task management system with CRUD operations
+- Interactive radio buttons for instant mode switching
+- Visual state feedback and theme system
+- Thread-safe architecture with proper state management
+
+**Next Priority: Phase 2** 🔄
+- Multi-tab GUI interface (Settings + Timeline/Stats)
+- Enhanced configuration options
+- Focus analytics foundation
+
+**Hackathon Goal: Phase 3** 🎯
+- Local AI integration with screenshot OCR and webcam monitoring
+- Focus detection and distraction logging
+- Real-time productivity insights
+
+This README provides the foundation for any AI model to quickly understand and work with the Focus Assist codebase. The architecture is clean, well-structured, and ready for the next phase of development toward the hackathon's AI-powered focus detection goals. 
