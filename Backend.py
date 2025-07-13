@@ -86,15 +86,18 @@ Respond in this exact JSON format:
             "timestamp": datetime.now().isoformat()
         }
 
-def classify_activity_from_text(extracted_text: str) -> Dict[str, Any]:
+def classify_activity_from_text(extracted_text: str, clip) -> Dict[str, Any]:
     """Classify the activity based on extracted text content"""
     
     # Create a comprehensive classification prompt for text analysis
     system_prompt = f"""
-    IGNORE ALL previous knowledge.
+    IGNORE ALL PREVIOUS KNOWLEGE.
     Analyze this text content extracted from a user's screen via OCR and classify their current activity.
 TEXT CONTENT FROM SCREEN:
 {extracted_text}
+
+HERE IS EXTRA INFO THAT MAY NOT BE RIGHT:
+Estimated Screen Category: {clip}
 
 Based on the text content above, classify the user's activity into ONE of these categories:
 - PROGRAMMING: Code, programming languages, IDEs, GitHub, Stack Overflow, coding tutorials, development tools
@@ -109,6 +112,9 @@ Based on the text content above, classify the user's activity into ONE of these 
 
 Look for specific keywords, application names, programming languages, code snippets, website names, etc.
 YouTube, Netfilx, Hulu, etc. is ALWAYS MEDIA
+
+IF is Productive -> Focus Level high or medium
+IF NOT Productive -> Focus Level medium or low
 
 
 Respond in this exact JSON format:
@@ -162,11 +168,12 @@ Respond in this exact JSON format:
         }
 
 # List of focus
+def screenshot():
+    return ImageGrab.grab()
 
-def get_json_screenshot(clip: str):
-    screenshot = ImageGrab.grab()
+def get_json_screenshot(screenshot: Image, clip_input: str):
     screenshot_text = get_text_from_screenshot(screenshot)
-    return classify_activity_from_text(extracted_text=screenshot_text)
+    return classify_activity_from_text(extracted_text=screenshot_text, clip=clip_input)
 
 def get_json_task(given_task: str):
     if given_task is None:
