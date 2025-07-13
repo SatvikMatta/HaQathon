@@ -1,6 +1,6 @@
 {
   "timer": {
-    "work_minutes": 30,
+    "work_minutes": 32,
     "short_break_minutes": 5,
     "long_break_minutes": 15
   },
@@ -8,9 +8,9 @@
     "checkin_interval_seconds": 30
   },
   "accountability": {
-    "mode": "casual"
+    "mode": "active"
   },
   "appearance": {
-    "dark_mode": true
+    "dark_mode": false
   }
 }

@@ -506,6 +506,8 @@ class FocusAssistApp:
             self.stats_content.grid(row=0, column=0, sticky='nsew', padx=20, pady=10)
         elif tab_name == "Settings":
             self.settings_content.grid(row=0, column=0, sticky='nsew', padx=20, pady=10)
+            # Refresh settings values when switching to settings tab
+            self._refresh_settings_ui()
             
     def update_tab_buttons(self):
         """Update tab button styles based on current selection"""
@@ -999,7 +1001,13 @@ class FocusAssistApp:
         close_btn.pack()
         
     def save_settings(self):
-        """Save all settings"""
+        """Save all settings and refresh timer state"""
+        # Store old settings for comparison
+        old_work_minutes = self.settings['timer']['work_minutes']
+        old_short_break = self.settings['timer']['short_break_minutes']
+        old_long_break = self.settings['timer']['long_break_minutes']
+        old_dark_mode = self.settings['appearance']['dark_mode']
+        
         # Update settings dictionary
         self.settings['timer']['work_minutes'] = int(self.work_minutes_slider.get())
         self.settings['timer']['short_break_minutes'] = int(self.short_break_slider.get())
@@ -1008,18 +1016,117 @@ class FocusAssistApp:
         self.settings['accountability']['mode'] = self.accountability_mode.get()
         self.settings['appearance']['dark_mode'] = self.settings_dark_mode_var.get()
         
+        # Check if timer settings changed
+        timer_settings_changed = (
+            old_work_minutes != self.settings['timer']['work_minutes'] or
+            old_short_break != self.settings['timer']['short_break_minutes'] or
+            old_long_break != self.settings['timer']['long_break_minutes']
+        )
+        
+        # If timer is running and timer settings changed, stop it to apply new settings
+        if self.timer and self.is_timer_running and timer_settings_changed:
+            self.stop_timer()
+            self.update_status("Timer stopped to apply new duration settings. Click START to resume with new settings.")
+        
         # Apply dark mode change if needed
-        if self.settings['appearance']['dark_mode'] != self.is_dark_mode:
+        if self.settings['appearance']['dark_mode'] != old_dark_mode:
             self.is_dark_mode = self.settings['appearance']['dark_mode']
             self.current_theme = Theme.DARK if self.is_dark_mode else Theme.LIGHT
             ctk.set_appearance_mode("dark" if self.is_dark_mode else "light")
             self._apply_theme_seamlessly()
         
-        # Save to file (optional - for persistence)
+        # Refresh timer display with new work duration
+        if timer_settings_changed:
+            new_work_minutes = self.settings['timer']['work_minutes']
+            new_time = f"{new_work_minutes}:00"
+            self.timer_label.configure(text=new_time)
+        
+        # Refresh all UI elements with new settings
+        self._refresh_all_ui_elements()
+        
+        # Save to file for persistence
         self.save_settings_to_file()
         
-        # Show confirmation
-        self.update_status("Settings saved successfully!")
+        # Show confirmation with details
+        if timer_settings_changed:
+            self.update_status(f"Settings saved! Timer durations updated: Work {self.settings['timer']['work_minutes']}min, Short break {self.settings['timer']['short_break_minutes']}min, Long break {self.settings['timer']['long_break_minutes']}min")
+        else:
+            self.update_status("Settings saved successfully!")
+            
+    def _refresh_all_ui_elements(self):
+        """Refresh all UI elements that depend on settings"""
+        # Refresh tasks display
+        self.schedule_update('tasks')
+        
+        # Refresh current task display
+        self.schedule_update('current_task')
+        
+        # Update timer colors to match current state
+        if hasattr(self, 'current_timer_state') and self.current_timer_state:
+            self.schedule_update('timer_colors')
+        
+        # Process all scheduled updates immediately
+        self.process_pending_updates()
+        
+        # Refresh core UI elements safely (avoid touching dynamic widgets)
+        self._refresh_core_ui_elements()
+    
+    def _refresh_core_ui_elements(self):
+        """Safely refresh core UI elements without touching dynamic widgets"""
+        try:
+            # Update main timer display colors only
+            if hasattr(self, 'timer_frame_ref') and self.timer_frame_ref.winfo_exists():
+                if hasattr(self, 'current_timer_state') and self.current_timer_state:
+                    colors = self.get_state_colors(self.current_timer_state)
+                    self.timer_frame_ref.configure(
+                        fg_color=colors['primary'],
+                        border_color=colors['border']
+                    )
+            
+            # Update timer label color
+            if hasattr(self, 'timer_label') and self.timer_label.winfo_exists():
+                self.timer_label.configure(text_color="white")
+                
+            # Update main containers only (avoid dynamic content)
+            if hasattr(self, 'timer_panel') and self.timer_panel.winfo_exists():
+                self.timer_panel.configure(
+                    fg_color=self.current_theme['bg_secondary'],
+                    border_color=self.current_theme['border']
+                )
+                
+            if hasattr(self, 'tasks_panel') and self.tasks_panel.winfo_exists():
+                self.tasks_panel.configure(
+                    fg_color=self.current_theme['bg_secondary'],
+                    border_color=self.current_theme['border']
+                )
+                
+        except Exception as e:
+            # Silently handle any widget errors during refresh
+            print(f"Warning: UI refresh error (non-critical): {e}")
+        
+    def _refresh_settings_ui(self):
+        """Refresh settings UI widgets with current values"""
+        if hasattr(self, 'work_minutes_slider'):
+            self.work_minutes_slider.set(self.settings['timer']['work_minutes'])
+            self.work_minutes_label.configure(text=f"{self.settings['timer']['work_minutes']} min")
+            
+        if hasattr(self, 'short_break_slider'):
+            self.short_break_slider.set(self.settings['timer']['short_break_minutes'])
+            self.short_break_label.configure(text=f"{self.settings['timer']['short_break_minutes']} min")
+            
+        if hasattr(self, 'long_break_slider'):
+            self.long_break_slider.set(self.settings['timer']['long_break_minutes'])
+            self.long_break_label.configure(text=f"{self.settings['timer']['long_break_minutes']} min")
+            
+        if hasattr(self, 'checkin_slider'):
+            self.checkin_slider.set(self.settings['ai']['checkin_interval_seconds'])
+            self.checkin_label.configure(text=f"{self.settings['ai']['checkin_interval_seconds']}s")
+            
+        if hasattr(self, 'accountability_mode'):
+            self.accountability_mode.set(self.settings['accountability']['mode'])
+            
+        if hasattr(self, 'settings_dark_mode_var'):
+            self.settings_dark_mode_var.set(self.settings['appearance']['dark_mode'])
         
     def save_settings_to_file(self):
         """Save settings to JSON file"""
@@ -1408,14 +1515,27 @@ class FocusAssistApp:
         # self.timer_display_frame colors will be set by _update_timer_colors_immediate()
         
         # Update timer label
-        self.timer_label.configure(text_color="white")
+        if hasattr(self, 'timer_label'):
+            try:
+                if self.timer_label.winfo_exists():
+                    self.timer_label.configure(text_color="white")
+            except Exception:
+                pass
         
         # Update text labels in current task display
         if hasattr(self, 'current_task_title'):
-            self.current_task_title.configure(text_color=self.current_theme['text_muted'])
+            try:
+                if self.current_task_title.winfo_exists():
+                    self.current_task_title.configure(text_color=self.current_theme['text_muted'])
+            except Exception:
+                pass
         
         if hasattr(self, 'current_task_label'):
-            self.current_task_label.configure(text_color=self.current_theme['text_primary'])
+            try:
+                if self.current_task_label.winfo_exists():
+                    self.current_task_label.configure(text_color=self.current_theme['text_primary'])
+            except Exception:
+                pass
         
         # Update buttons
         self.start_pause_btn.configure(
@@ -1432,11 +1552,20 @@ class FocusAssistApp:
         
         # Update status bar
         if hasattr(self, 'status_label'):
-            self.status_label.configure(text_color=self.current_theme['text_muted'])
+            try:
+                if self.status_label.winfo_exists():
+                    self.status_label.configure(text_color=self.current_theme['text_muted'])
+            except Exception:
+                pass
         
-        # Update empty state text if it exists
+        # Update empty state text if it exists and is valid
         if hasattr(self, 'empty_text'):
-            self.empty_text.configure(text_color=self.current_theme['text_muted'])
+            try:
+                if self.empty_text.winfo_exists():
+                    self.empty_text.configure(text_color=self.current_theme['text_muted'])
+            except Exception:
+                # Widget may have been destroyed, skip safely
+                pass
         
         # Efficiently update task cards without full recreation
         self._update_task_cards_theme()
