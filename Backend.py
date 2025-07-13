@@ -163,6 +163,9 @@ Respond in this exact JSON format:
             "timestamp": datetime.now().isoformat()
         }
 
+# List of focus
+
+
 def get_json_screenshot():
     screenshot = ImageGrab.grab()
     screenshot_text = get_text_from_screenshot(screenshot)
