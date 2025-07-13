@@ -381,6 +381,10 @@ class PomodoroTimer:
             if self._target_state:
                 # Use the target state instead of normal logic
                 self._state = self._target_state
+                # Set current task status to IN_PROGRESS when skipping to work
+                if self._target_state == TimerState.WORK and self._current_task_idx < len(self._tasks):
+                    current_task = self._tasks[self._current_task_idx]
+                    current_task.status = TaskStatus.IN_PROGRESS
                 # Note: If skip_to_state already handled pomodoro completion, we don't need to do it again
             else:
                 # Normal completion logic
@@ -410,6 +414,9 @@ class PomodoroTimer:
                 else:  # After break
                     if self._current_task_idx < len(self._tasks):
                         self._state = TimerState.WORK
+                        # Set current task status to IN_PROGRESS when starting work
+                        current_task = self._tasks[self._current_task_idx]
+                        current_task.status = TaskStatus.IN_PROGRESS
                     else:
                         self._state = TimerState.IDLE
                         self._notify_state_change(self._state)

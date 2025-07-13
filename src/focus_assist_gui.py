@@ -306,6 +306,14 @@ class FocusAssistApp:
         # Load logo
         self.load_logo()
         
+        # Initialize and load settings
+        self.initialize_settings()
+        if self.load_settings_from_file():
+            # Apply loaded dark mode setting
+            self.is_dark_mode = self.settings['appearance']['dark_mode']
+            self.current_theme = Theme.DARK if self.is_dark_mode else Theme.LIGHT
+            ctk.set_appearance_mode("dark" if self.is_dark_mode else "light")
+        
         # Create UI
         self.create_main_interface()
         self.apply_theme()
@@ -439,17 +447,7 @@ class FocusAssistApp:
         )
         self.settings_button.pack(side='left', padx=(0, 12))
         
-        # Simplified dark mode toggle without icons
-        self.dark_mode_var = ctk.BooleanVar(value=self.is_dark_mode)
-        self.dark_mode_toggle = ctk.CTkSwitch(
-            controls_frame,
-            text="Dark Mode",
-            variable=self.dark_mode_var,
-            command=self.toggle_dark_mode,
-            font=ctk.CTkFont(size=12),
-            text_color=self.current_theme['text_secondary']
-        )
-        self.dark_mode_toggle.pack(side='left')
+        # Dark mode toggle removed - now in settings tab
         
         # Bottom row - Navigation tabs
         self.nav_frame = ctk.CTkFrame(header_container, fg_color='transparent')
@@ -611,25 +609,443 @@ class FocusAssistApp:
         self.settings_content.grid_columnconfigure(0, weight=1)
         self.settings_content.grid_rowconfigure(0, weight=1)
         
-        # Placeholder content for settings tab
-        settings_frame = ctk.CTkFrame(
+        # Create scrollable settings frame
+        settings_scroll = ctk.CTkScrollableFrame(
             self.settings_content,
             fg_color=self.current_theme['bg_secondary'],
             corner_radius=16,
             border_width=1,
             border_color=self.current_theme['border']
         )
-        settings_frame.grid(row=0, column=0, sticky='nsew')
+        settings_scroll.grid(row=0, column=0, sticky='nsew', padx=20, pady=20)
+        settings_scroll.grid_columnconfigure(0, weight=1)
         
-        # Coming soon message
-        coming_soon_label = ctk.CTkLabel(
-            settings_frame,
-            text="⚙️ Settings & Configuration\n\nComing Soon!\n\nThis tab will include:\n• Timer duration settings\n• AI monitoring intervals\n• Focus thresholds\n• Notification preferences",
-            font=ctk.CTkFont(size=16),
-            text_color=self.current_theme['text_primary'],
-            justify='center'
+        # Settings header
+        header_frame = ctk.CTkFrame(settings_scroll, fg_color='transparent')
+        header_frame.grid(row=0, column=0, sticky='ew', pady=(20, 30))
+        
+        settings_title = ctk.CTkLabel(
+            header_frame,
+            text="⚙️ Settings & Configuration",
+            font=ctk.CTkFont(size=28, weight='bold'),
+            text_color=self.current_theme['text_primary']
         )
-        coming_soon_label.pack(expand=True, pady=50)
+        settings_title.pack()
+        
+        # Initialize settings if not exists
+        if not hasattr(self, 'settings'):
+            self.initialize_settings()
+        
+        # Create settings sections
+        self.create_timer_settings_section(settings_scroll)
+        self.create_ai_settings_section(settings_scroll)
+        self.create_accountability_settings_section(settings_scroll)
+        self.create_appearance_settings_section(settings_scroll)
+        
+        # Save button
+        save_frame = ctk.CTkFrame(settings_scroll, fg_color='transparent')
+        save_frame.grid(row=5, column=0, sticky='ew', pady=(30, 20))
+        
+        save_btn = ctk.CTkButton(
+            save_frame,
+            text="💾 Save Settings",
+            width=200,
+            height=50,
+            font=ctk.CTkFont(size=16, weight='bold'),
+            fg_color=self.current_theme['primary'],
+            hover_color=self.current_theme['primary_hover'],
+            corner_radius=15,
+            command=self.save_settings
+        )
+        save_btn.pack(pady=10)
+    
+    def initialize_settings(self):
+        """Initialize default settings"""
+        self.settings = {
+            'timer': {
+                'work_minutes': 25,
+                'short_break_minutes': 5,
+                'long_break_minutes': 15
+            },
+            'ai': {
+                'checkin_interval_seconds': 30
+            },
+            'accountability': {
+                'mode': 'casual'  # casual, active, strict
+            },
+            'appearance': {
+                'dark_mode': False
+            }
+        }
+        
+    def create_timer_settings_section(self, parent):
+        """Create timer settings section"""
+        section_frame = ctk.CTkFrame(parent, fg_color=self.current_theme['card_bg'], corner_radius=12)
+        section_frame.grid(row=1, column=0, sticky='ew', pady=(0, 20), padx=20)
+        section_frame.grid_columnconfigure(1, weight=1)
+        
+        # Section header
+        header_label = ctk.CTkLabel(
+            section_frame,
+            text="🍅 Timer Settings",
+            font=ctk.CTkFont(size=20, weight='bold'),
+            text_color=self.current_theme['text_primary']
+        )
+        header_label.grid(row=0, column=0, columnspan=2, sticky='w', padx=20, pady=(20, 15))
+        
+        # Work duration
+        work_label = ctk.CTkLabel(
+            section_frame,
+            text="Work Duration:",
+            font=ctk.CTkFont(size=14),
+            text_color=self.current_theme['text_secondary']
+        )
+        work_label.grid(row=1, column=0, sticky='w', padx=20, pady=5)
+        
+        work_frame = ctk.CTkFrame(section_frame, fg_color='transparent')
+        work_frame.grid(row=1, column=1, sticky='ew', padx=20, pady=5)
+        
+        self.work_minutes_slider = ctk.CTkSlider(
+            work_frame,
+            from_=15,
+            to=60,
+            number_of_steps=45,
+            width=200,
+            command=self.update_work_minutes_label
+        )
+        self.work_minutes_slider.set(self.settings['timer']['work_minutes'])
+        self.work_minutes_slider.pack(side='left', padx=(0, 10))
+        
+        self.work_minutes_label = ctk.CTkLabel(
+            work_frame,
+            text=f"{self.settings['timer']['work_minutes']} min",
+            font=ctk.CTkFont(size=12),
+            text_color=self.current_theme['text_primary'],
+            width=60
+        )
+        self.work_minutes_label.pack(side='left')
+        
+        # Short break duration
+        short_break_label = ctk.CTkLabel(
+            section_frame,
+            text="Short Break:",
+            font=ctk.CTkFont(size=14),
+            text_color=self.current_theme['text_secondary']
+        )
+        short_break_label.grid(row=2, column=0, sticky='w', padx=20, pady=5)
+        
+        short_break_frame = ctk.CTkFrame(section_frame, fg_color='transparent')
+        short_break_frame.grid(row=2, column=1, sticky='ew', padx=20, pady=5)
+        
+        self.short_break_slider = ctk.CTkSlider(
+            short_break_frame,
+            from_=3,
+            to=15,
+            number_of_steps=12,
+            width=200,
+            command=self.update_short_break_label
+        )
+        self.short_break_slider.set(self.settings['timer']['short_break_minutes'])
+        self.short_break_slider.pack(side='left', padx=(0, 10))
+        
+        self.short_break_label = ctk.CTkLabel(
+            short_break_frame,
+            text=f"{self.settings['timer']['short_break_minutes']} min",
+            font=ctk.CTkFont(size=12),
+            text_color=self.current_theme['text_primary'],
+            width=60
+        )
+        self.short_break_label.pack(side='left')
+        
+        # Long break duration
+        long_break_label = ctk.CTkLabel(
+            section_frame,
+            text="Long Break:",
+            font=ctk.CTkFont(size=14),
+            text_color=self.current_theme['text_secondary']
+        )
+        long_break_label.grid(row=3, column=0, sticky='w', padx=20, pady=(5, 20))
+        
+        long_break_frame = ctk.CTkFrame(section_frame, fg_color='transparent')
+        long_break_frame.grid(row=3, column=1, sticky='ew', padx=20, pady=(5, 20))
+        
+        self.long_break_slider = ctk.CTkSlider(
+            long_break_frame,
+            from_=10,
+            to=30,
+            number_of_steps=20,
+            width=200,
+            command=self.update_long_break_label
+        )
+        self.long_break_slider.set(self.settings['timer']['long_break_minutes'])
+        self.long_break_slider.pack(side='left', padx=(0, 10))
+        
+        self.long_break_label = ctk.CTkLabel(
+            long_break_frame,
+            text=f"{self.settings['timer']['long_break_minutes']} min",
+            font=ctk.CTkFont(size=12),
+            text_color=self.current_theme['text_primary'],
+            width=60
+        )
+        self.long_break_label.pack(side='left')
+        
+    def create_ai_settings_section(self, parent):
+        """Create AI settings section"""
+        section_frame = ctk.CTkFrame(parent, fg_color=self.current_theme['card_bg'], corner_radius=12)
+        section_frame.grid(row=2, column=0, sticky='ew', pady=(0, 20), padx=20)
+        section_frame.grid_columnconfigure(1, weight=1)
+        
+        # Section header
+        header_label = ctk.CTkLabel(
+            section_frame,
+            text="🤖 AI Monitoring Settings",
+            font=ctk.CTkFont(size=20, weight='bold'),
+            text_color=self.current_theme['text_primary']
+        )
+        header_label.grid(row=0, column=0, columnspan=2, sticky='w', padx=20, pady=(20, 15))
+        
+        # Check-in interval
+        checkin_label = ctk.CTkLabel(
+            section_frame,
+            text="Check-in Interval:",
+            font=ctk.CTkFont(size=14),
+            text_color=self.current_theme['text_secondary']
+        )
+        checkin_label.grid(row=1, column=0, sticky='w', padx=20, pady=(5, 20))
+        
+        checkin_frame = ctk.CTkFrame(section_frame, fg_color='transparent')
+        checkin_frame.grid(row=1, column=1, sticky='ew', padx=20, pady=(5, 20))
+        
+        self.checkin_slider = ctk.CTkSlider(
+            checkin_frame,
+            from_=30,
+            to=300,
+            number_of_steps=54,
+            width=200,
+            command=self.update_checkin_label
+        )
+        self.checkin_slider.set(self.settings['ai']['checkin_interval_seconds'])
+        self.checkin_slider.pack(side='left', padx=(0, 10))
+        
+        self.checkin_label = ctk.CTkLabel(
+            checkin_frame,
+            text=f"{self.settings['ai']['checkin_interval_seconds']}s",
+            font=ctk.CTkFont(size=12),
+            text_color=self.current_theme['text_primary'],
+            width=60
+        )
+        self.checkin_label.pack(side='left')
+        
+    def create_accountability_settings_section(self, parent):
+        """Create accountability settings section"""
+        section_frame = ctk.CTkFrame(parent, fg_color=self.current_theme['card_bg'], corner_radius=12)
+        section_frame.grid(row=3, column=0, sticky='ew', pady=(0, 20), padx=20)
+        section_frame.grid_columnconfigure(1, weight=1)
+        
+        # Section header with tooltip
+        header_frame = ctk.CTkFrame(section_frame, fg_color='transparent')
+        header_frame.grid(row=0, column=0, columnspan=2, sticky='ew', padx=20, pady=(20, 15))
+        
+        header_label = ctk.CTkLabel(
+            header_frame,
+            text="⚖️ Accountability Mode",
+            font=ctk.CTkFont(size=20, weight='bold'),
+            text_color=self.current_theme['text_primary']
+        )
+        header_label.pack(side='left')
+        
+        # Tooltip button
+        tooltip_btn = ctk.CTkButton(
+            header_frame,
+            text="?",
+            width=25,
+            height=25,
+            font=ctk.CTkFont(size=12, weight='bold'),
+            fg_color=self.current_theme['accent'],
+            hover_color=self.current_theme['accent_hover'],
+            corner_radius=12,
+            command=self.show_accountability_tooltip
+        )
+        tooltip_btn.pack(side='left', padx=(10, 0))
+        
+        # Mode selection
+        mode_label = ctk.CTkLabel(
+            section_frame,
+            text="Mode:",
+            font=ctk.CTkFont(size=14),
+            text_color=self.current_theme['text_secondary']
+        )
+        mode_label.grid(row=1, column=0, sticky='w', padx=20, pady=(5, 20))
+        
+        mode_frame = ctk.CTkFrame(section_frame, fg_color='transparent')
+        mode_frame.grid(row=1, column=1, sticky='ew', padx=20, pady=(5, 20))
+        
+        self.accountability_mode = ctk.CTkOptionMenu(
+            mode_frame,
+            values=["casual", "active", "strict"],
+            width=200,
+            font=ctk.CTkFont(size=14),
+            fg_color=self.current_theme['bg_tertiary'],
+            button_color=self.current_theme['primary'],
+            button_hover_color=self.current_theme['primary_hover'],
+            text_color=self.current_theme['text_primary']
+        )
+        self.accountability_mode.set(self.settings['accountability']['mode'])
+        self.accountability_mode.pack(side='left')
+        
+    def create_appearance_settings_section(self, parent):
+        """Create appearance settings section"""
+        section_frame = ctk.CTkFrame(parent, fg_color=self.current_theme['card_bg'], corner_radius=12)
+        section_frame.grid(row=4, column=0, sticky='ew', pady=(0, 20), padx=20)
+        section_frame.grid_columnconfigure(1, weight=1)
+        
+        # Section header
+        header_label = ctk.CTkLabel(
+            section_frame,
+            text="🎨 Appearance",
+            font=ctk.CTkFont(size=20, weight='bold'),
+            text_color=self.current_theme['text_primary']
+        )
+        header_label.grid(row=0, column=0, columnspan=2, sticky='w', padx=20, pady=(20, 15))
+        
+        # Dark mode toggle
+        dark_mode_label = ctk.CTkLabel(
+            section_frame,
+            text="Dark Mode:",
+            font=ctk.CTkFont(size=14),
+            text_color=self.current_theme['text_secondary']
+        )
+        dark_mode_label.grid(row=1, column=0, sticky='w', padx=20, pady=(5, 20))
+        
+        dark_mode_frame = ctk.CTkFrame(section_frame, fg_color='transparent')
+        dark_mode_frame.grid(row=1, column=1, sticky='ew', padx=20, pady=(5, 20))
+        
+        self.settings_dark_mode_var = ctk.BooleanVar(value=self.settings['appearance']['dark_mode'])
+        self.settings_dark_mode_toggle = ctk.CTkSwitch(
+            dark_mode_frame,
+            text="Enable Dark Mode",
+            variable=self.settings_dark_mode_var,
+            font=ctk.CTkFont(size=12),
+            text_color=self.current_theme['text_secondary']
+        )
+        self.settings_dark_mode_toggle.pack(side='left')
+        
+    def update_work_minutes_label(self, value):
+        """Update work minutes label"""
+        minutes = int(value)
+        self.work_minutes_label.configure(text=f"{minutes} min")
+        
+    def update_short_break_label(self, value):
+        """Update short break label"""
+        minutes = int(value)
+        self.short_break_label.configure(text=f"{minutes} min")
+        
+    def update_long_break_label(self, value):
+        """Update long break label"""
+        minutes = int(value)
+        self.long_break_label.configure(text=f"{minutes} min")
+        
+    def update_checkin_label(self, value):
+        """Update checkin interval label"""
+        seconds = int(value)
+        self.checkin_label.configure(text=f"{seconds}s")
+        
+    def show_accountability_tooltip(self):
+        """Show accountability mode tooltip"""
+        tooltip_text = (
+            "Accountability Mode Explanations:\n\n"
+            "🟢 Casual: Just reports focus/distraction data to you\n\n"
+            "🟡 Active: Reduces break time based on distraction time\n\n"
+            "🔴 Strict: Advanced penalties and interventions\n"
+            "    (Future implementation)"
+        )
+        
+        # Create tooltip window
+        tooltip = ctk.CTkToplevel(self.root)
+        tooltip.title("Accountability Mode Help")
+        tooltip.geometry("450x250")
+        tooltip.resizable(False, False)
+        tooltip.configure(fg_color=self.current_theme['bg_primary'])
+        
+        # Center tooltip
+        tooltip.update_idletasks()
+        x = (self.root.winfo_screenwidth() // 2) - (450 // 2)
+        y = (self.root.winfo_screenheight() // 2) - (250 // 2)
+        tooltip.geometry(f"450x250+{x}+{y}")
+        
+        # Content
+        content_frame = ctk.CTkFrame(tooltip, fg_color='transparent')
+        content_frame.pack(fill='both', expand=True, padx=20, pady=20)
+        
+        tooltip_label = ctk.CTkLabel(
+            content_frame,
+            text=tooltip_text,
+            font=ctk.CTkFont(size=14),
+            text_color=self.current_theme['text_primary'],
+            justify='left'
+        )
+        tooltip_label.pack(pady=(0, 20))
+        
+        close_btn = ctk.CTkButton(
+            content_frame,
+            text="Got it!",
+            width=100,
+            height=35,
+            font=ctk.CTkFont(size=12, weight='bold'),
+            fg_color=self.current_theme['primary'],
+            hover_color=self.current_theme['primary_hover'],
+            command=tooltip.destroy
+        )
+        close_btn.pack()
+        
+    def save_settings(self):
+        """Save all settings"""
+        # Update settings dictionary
+        self.settings['timer']['work_minutes'] = int(self.work_minutes_slider.get())
+        self.settings['timer']['short_break_minutes'] = int(self.short_break_slider.get())
+        self.settings['timer']['long_break_minutes'] = int(self.long_break_slider.get())
+        self.settings['ai']['checkin_interval_seconds'] = int(self.checkin_slider.get())
+        self.settings['accountability']['mode'] = self.accountability_mode.get()
+        self.settings['appearance']['dark_mode'] = self.settings_dark_mode_var.get()
+        
+        # Apply dark mode change if needed
+        if self.settings['appearance']['dark_mode'] != self.is_dark_mode:
+            self.is_dark_mode = self.settings['appearance']['dark_mode']
+            self.current_theme = Theme.DARK if self.is_dark_mode else Theme.LIGHT
+            ctk.set_appearance_mode("dark" if self.is_dark_mode else "light")
+            self._apply_theme_seamlessly()
+        
+        # Save to file (optional - for persistence)
+        self.save_settings_to_file()
+        
+        # Show confirmation
+        self.update_status("Settings saved successfully!")
+        
+    def save_settings_to_file(self):
+        """Save settings to JSON file"""
+        try:
+            settings_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'settings.json')
+            with open(settings_path, 'w') as f:
+                json.dump(self.settings, f, indent=2)
+        except Exception as e:
+            print(f"Error saving settings: {e}")
+            
+    def load_settings_from_file(self):
+        """Load settings from JSON file"""
+        try:
+            settings_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'settings.json')
+            if os.path.exists(settings_path):
+                with open(settings_path, 'r') as f:
+                    loaded_settings = json.load(f)
+                    # Merge with defaults to handle missing keys
+                    self.initialize_settings()
+                    for category, values in loaded_settings.items():
+                        if category in self.settings:
+                            self.settings[category].update(values)
+                    return True
+        except Exception as e:
+            print(f"Error loading settings: {e}")
+        return False
         
     def create_timer_panel(self):
         """Create timer panel"""
@@ -681,9 +1097,13 @@ class FocusAssistApp:
         )
         self.timer_display_frame.grid(row=1, column=0, sticky='ew', pady=(0, 20))
         
+        # Get initial timer display from settings
+        initial_minutes = self.settings['timer']['work_minutes']
+        initial_time = f"{initial_minutes}:00"
+        
         self.timer_label = ctk.CTkLabel(
             self.timer_display_frame,
-            text="25:00",
+            text=initial_time,
             font=ctk.CTkFont(size=64, weight='bold'),
             text_color="white"
         )
@@ -871,16 +1291,7 @@ class FocusAssistApp:
         )
         self.status_label.pack()
         
-    def toggle_dark_mode(self):
-        """Toggle between light and dark modes with seamless transition"""
-        self.is_dark_mode = self.dark_mode_var.get()
-        self.current_theme = Theme.DARK if self.is_dark_mode else Theme.LIGHT
-        
-        # Update CustomTkinter appearance
-        ctk.set_appearance_mode("dark" if self.is_dark_mode else "light")
-        
-        # Apply theme changes seamlessly
-        self._apply_theme_seamlessly()
+    # Dark mode toggle moved to settings tab - handled by save_settings method
         
     def _apply_theme_seamlessly(self):
         """Apply theme changes seamlessly with window hiding for instant transition"""
@@ -940,12 +1351,7 @@ class FocusAssistApp:
         # Update header elements
         if hasattr(self, 'title_label'):
             self.title_label.configure(text_color=self.current_theme['primary'])
-        # Update dark mode toggle (no icons)
-        if hasattr(self, 'dark_mode_toggle'):
-            self.dark_mode_toggle.configure(
-                text="Dark Mode",
-                text_color=self.current_theme['text_secondary']
-            )
+        # Dark mode toggle moved to settings tab
         
         # Update navigation tabs and settings button
         if hasattr(self, 'nav_buttons'):
@@ -1193,6 +1599,9 @@ class FocusAssistApp:
         # Update task reference
         task_card.task = task
         
+        # Update the task card's visual elements (progress, status, etc.)
+        task_card.update_progress_only()
+        
         # Update highlight for current task
         if index == self.current_task_index:
             task_card.configure(border_width=2, border_color=self.current_theme['primary'])
@@ -1332,10 +1741,10 @@ class FocusAssistApp:
         if not self.tasks:
             return
             
-        # Use normal time settings (demo mode removed)
-        work_time = DEFAULT_WORK_SECONDS
-        short_break = DEFAULT_SHORT_BREAK_SECONDS
-        long_break = DEFAULT_LONG_BREAK_SECONDS
+        # Use settings for timer durations
+        work_time = self.settings['timer']['work_minutes'] * 60
+        short_break = self.settings['timer']['short_break_minutes'] * 60
+        long_break = self.settings['timer']['long_break_minutes'] * 60
             
         # Create timer with a copy of current tasks
         self.timer = PomodoroTimer(
@@ -1357,7 +1766,6 @@ class FocusAssistApp:
         
         # Sync initial state from timer
         self.sync_tasks_from_timer()
-        self.update_current_task_display()
         
     def toggle_timer(self):
         """Toggle timer start/pause"""
@@ -1382,8 +1790,6 @@ class FocusAssistApp:
                 
                 # Sync task state from timer (timer updates task status internally)
                 self.sync_tasks_from_timer()
-                self.schedule_update('tasks')
-                self.schedule_update('current_task')
                 
                 # Update colors for the initial timer state
                 self.update_timer_colors(self.timer.state)
@@ -1396,6 +1802,10 @@ class FocusAssistApp:
                 # Resume timer
                 if self.timer.start():
                     self.start_pause_btn.configure(text="PAUSE")
+                    
+                    # Sync task status when resuming
+                    self.sync_tasks_from_timer()
+                    
                     self.update_status("Timer resumed")
                 else:
                     self.update_status("Failed to resume timer")
@@ -1415,7 +1825,11 @@ class FocusAssistApp:
             self.timer.pause()  # This will stop the timer
             self.timer = None
             self.start_pause_btn.configure(text="START")
-            self.timer_label.configure(text="25:00")
+            
+            # Reset timer display to settings default
+            reset_minutes = self.settings['timer']['work_minutes']
+            reset_time = f"{reset_minutes}:00"
+            self.timer_label.configure(text=reset_time)
             
             # Reset to default work mode colors
             self.current_timer_state = TimerState.WORK
@@ -1558,6 +1972,10 @@ class FocusAssistApp:
         # Sync tasks from timer on every state change to keep GUI updated
         self.sync_tasks_from_timer()
         
+        # Process any pending task updates immediately for timer state changes
+        if 'tasks' in self.pending_updates:
+            self.process_pending_updates()
+        
         # Update colors for new state
         self.update_timer_colors(state)
         
@@ -1576,7 +1994,11 @@ class FocusAssistApp:
             
             # Reset UI elements
             self.start_pause_btn.configure(text="START")
-            self.timer_label.configure(text="25:00")
+            
+            # Reset timer display to settings default
+            reset_minutes = self.settings['timer']['work_minutes']
+            reset_time = f"{reset_minutes}:00"
+            self.timer_label.configure(text=reset_time)
             
             # Reset to default work mode colors and state
             self.current_timer_state = TimerState.WORK
@@ -1621,35 +2043,29 @@ class FocusAssistApp:
         if not self.timer:
             return
             
-        # Get updated tasks from timer
-        updated_timer_tasks = self.timer.tasks  # This returns a copy
+        # Get updated tasks from timer (this returns a copy)
+        updated_timer_tasks = self.timer.tasks
         
-        # Track changes for debugging
+        # Force complete sync by updating ALL task properties
         changes_made = False
-        
-        # Update GUI tasks with timer tasks data
         for i, timer_task in enumerate(updated_timer_tasks):
             if i < len(self.tasks):
-                # Update existing task
                 gui_task = self.tasks[i]
+                # Always check and update all properties
                 if (gui_task.completed_pomodoros != timer_task.completed_pomodoros or 
                     gui_task.status != timer_task.status):
                     changes_made = True
                     gui_task.completed_pomodoros = timer_task.completed_pomodoros
                     gui_task.status = timer_task.status
-            else:
-                # This shouldn't happen if sync is correct
-                print(f"Warning: Timer has more tasks than GUI at index {i}")
-                
-        # Sync current task index from timer
+                    
+        # Sync current task index
         if self.current_task_index != self.timer.current_task_idx:
             changes_made = True
             self.current_task_index = self.timer.current_task_idx
             
-        # Schedule UI updates if changes were made
-        if changes_made:
-            self.schedule_update('tasks')
-            self.schedule_update('current_task')
+        # Always force refresh for timer state changes to ensure display is current
+        self._refresh_tasks_immediate()
+        self._update_current_task_immediate()
                 
     def move_to_next_task(self):
         """Move to the next incomplete task - deprecated, timer handles this internally"""
