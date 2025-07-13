@@ -179,8 +179,9 @@ class PomodoroTimer:
         # Calculate how many AI snapshots should have occurred by now
         snapshots_due = int(elapsed_time // self._ai_checkin_interval)
         
-        # Initialize tracking on first run
-        if self._last_ai_snapshot is None:
+        # FIX: _last_ai_snapshot is initialized as int=0, not None, so this condition never triggers
+        # Just ensure it's initialized properly
+        if self._last_ai_snapshot < 0:  # Changed from None check
             self._last_ai_snapshot = 0  # Track number of snapshots taken
         
         # Check if we need to trigger more snapshots

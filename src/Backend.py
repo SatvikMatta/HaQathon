@@ -126,10 +126,10 @@ Respond in this exact JSON format:
 "description": "Brief description of what the user is doing based on the text",
 "key_indicators": ["list", "of", "key", "words", "or", "phrases", "that", "led", "to", "this", "classification"],
 "is_productive": true/false,
-"focus_level": "high/medium/low"
+"focus_level": "high/medium/low",
 }}
 
-                        DO NOT include any text outside the JSON response."""
+                        DO NOT include any text outside the JSON response. MAKE SURE THAT THE JSON IS VALID."""
     try:
         # Prepare the request
         chat_url = f"{BASE_URL}/api/v1/workspace/{WORKSPACE_SLUG}/chat"
@@ -148,9 +148,16 @@ Respond in this exact JSON format:
         
         if response.status_code == 200:
             result = response.json()
+            text = result.get("textResponse", "")
+            # Check if the text is a valid JSON
+            try:
+                json.loads(text)
+            except json.JSONDecodeError:
+                # add end '}' to the text
+                text = text + "}"
             return {
                 "success": True,
-                "classification": result.get("textResponse", ""),
+                "classification": text,
                 "metrics": result.get("metrics", {}),
                 "timestamp": datetime.now().isoformat(),
                 "extracted_text_length": len(extracted_text)

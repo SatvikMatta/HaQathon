@@ -33,6 +33,7 @@ from pomodoro.constants import (
     DEFAULT_WORK_SECONDS, DEFAULT_SHORT_BREAK_SECONDS,
     DEFAULT_LONG_BREAK_SECONDS
 )
+from eventlogging import SessionEventLogger
 
 # global variables
 session = None
@@ -337,6 +338,9 @@ class FocusAssistApp:
         self.ai_result_queue = queue.Queue()
         self.ai_inference_active = False
         self.ai_shutdown_event = threading.Event()
+        
+        # Event Logging
+        self.event_logger = SessionEventLogger()
         
         # UI optimization
         self.task_cards: List[TaskCard] = []
@@ -2174,6 +2178,13 @@ class FocusAssistApp:
             ai_checkin_interval_seconds=self.settings['ai']['checkin_interval_seconds']
         )
         
+        # Log timer start event
+        self.event_logger.log_timer_start(
+            pomodoro_length=work_time,
+            break_length=short_break,
+            long_break_length=long_break
+        )
+        
         # Sync timer's current task index with GUI's selection
         if hasattr(self.timer, '_current_task_idx'):
             self.timer._current_task_idx = self.current_task_index
@@ -2242,6 +2253,10 @@ class FocusAssistApp:
         """Stop the timer"""
         if self.timer:
             self.is_timer_running = False
+            
+            # Print session summary before stopping
+            self.event_logger.print_session_summary()
+            
             # Force timer to idle state
             self.timer.pause()  # This will stop the timer
             self.timer = None
@@ -2402,6 +2417,9 @@ class FocusAssistApp:
         state_text = state.value.replace('_', ' ').title()
         self.update_status(f"Timer state: {state_text}")
         
+        # Log state change events
+        self._log_state_change_events(state)
+        
         # Track last active state for radio button highlighting when paused
         if state in [TimerState.WORK, TimerState.SHORT_BREAK, TimerState.LONG_BREAK]:
             self.last_active_state = state
@@ -2428,6 +2446,9 @@ class FocusAssistApp:
         if state == TimerState.IDLE:
             # All tasks completed - reset timer but keep it ready for new tasks
             self.is_timer_running = False
+            
+            # Print session summary before clearing
+            self.event_logger.print_session_summary()
             
             # Stop the timer but don't destroy it - we'll recreate it when needed
             if self.timer:
@@ -2457,6 +2478,35 @@ class FocusAssistApp:
             # Update button text when resumed/started
             if hasattr(self, 'start_pause_btn') and self.is_timer_running:
                 self.start_pause_btn.configure(text="PAUSE")
+    
+    def _log_state_change_events(self, new_state: TimerState):
+        """Log appropriate events based on timer state changes"""
+        # Log events for state transitions
+        if new_state == TimerState.WORK:
+            # Starting a work period - log end of previous break if applicable
+            if hasattr(self, '_previous_timer_state'):
+                if self._previous_timer_state == TimerState.SHORT_BREAK:
+                    self.event_logger.log_break_end()
+                elif self._previous_timer_state == TimerState.LONG_BREAK:
+                    self.event_logger.log_long_break_end()
+            
+            if 0 <= self.current_task_index < len(self.tasks):
+                current_task = self.tasks[self.current_task_index]
+                self.event_logger.log_pom_start(
+                    task_title=current_task.title,
+                    curr_pomodoro=current_task.completed_pomodoros + 1  # Next pomodoro to be completed
+                )
+        elif new_state == TimerState.SHORT_BREAK:
+            # Just finished a work period, starting short break
+            self.event_logger.log_pom_end()
+            self.event_logger.log_break_start()
+        elif new_state == TimerState.LONG_BREAK:
+            # Just finished a work period, starting long break
+            self.event_logger.log_pom_end()
+            self.event_logger.log_long_break_start()
+        
+        # Store current state as previous for next transition
+        self._previous_timer_state = new_state
     
     def get_clip_inference(self, screenshot: Image.Image):
         global session, tokenizer, img_name, txt_name, out_name
@@ -2508,14 +2558,14 @@ class FocusAssistApp:
             # Mark inference as active
             self.ai_inference_active = True
             
-            # Submit AI inference to thread pool (non-blocking) - no verbose logging
+            # Submit AI inference to thread pool (non-blocking)
             try:
                 future = self.ai_executor.submit(self.run_ai_inference_async, interval, accountability_mode)
                 # Don't wait for the result - it will be processed by the queue
             except Exception as e:
                 print(f"🤖 Failed to submit AI inference task: {e}")
                 self.ai_inference_active = False
-                
+    
     def on_work_session_completed(self):
         """Handle completion of a work session (pomodoro) - sync from timer"""
         # The timer handles all task completion logic internally
@@ -2732,6 +2782,10 @@ class FocusAssistApp:
         """Clean up all resources before shutdown"""
         print("🧹 Cleaning up resources...")
         
+        # Print session summary if there are events
+        if hasattr(self, 'event_logger') and self.event_logger.get_event_count() > 0:
+            self.event_logger.print_session_summary()
+        
         # Signal shutdown to AI processing
         self.ai_shutdown_event.set()
         
@@ -2809,20 +2863,63 @@ class FocusAssistApp:
             
             # Process successful result
             clip_class = result.get('clip_class', 'unknown')
-            classification = result.get('classification', {})
+            classification = result.get('classification', "{}")
             processing_time = result.get('processing_time', 0)
             
-            # Only print essential AI results - keep it minimal to avoid breaking progress bar
+            # Print AI results for verification
             print(f"📊 CLIP: {clip_class}")
             if classification:
                 print(f"📋 OCR: {classification}")
+            
+            # FIX: classification is already a dict, don't parse it again!
+            self._log_ai_snapshot_event(clip_class, classification)
             
             # Update GUI status if needed (non-blocking)
             if hasattr(self, 'update_status'):
                 self.update_status(f"AI Analysis: {clip_class} detected ({processing_time:.1f}s)")
                 
         except Exception as e:
-            print(f"AI result handling error: {e}")
+            print(f"🔥 AI result handling error: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def _log_ai_snapshot_event(self, clip_class: str, classification):
+        """Log AI snapshot event with extracted data from a string in JSON format"""
+        try:
+            # Handle case where classification might be a string or dict
+            if isinstance(classification, str):
+                # Map JSON fields exactly as specified:
+                # "category" -> s_category
+                # "focus_level" -> s_focus  
+                # "is_productive" -> s_is_productive
+
+                # convert the strting to a dict using Json
+                classification = json.loads(classification)
+                
+                s_category = classification.get('category', 'UNKNOWN')
+                s_focus = classification.get('focus_level', 'unknown')
+                s_is_productive = classification.get('is_productive', False)
+            else:
+                # Fallback for non-dict classification
+                s_category = 'UNKNOWN'
+                s_focus = 'unknown'
+                s_is_productive = False
+            
+            print(f"🎯 Logging AI_SNAP: category={s_category}, focus={s_focus}, productive={s_is_productive}")
+            
+            # Log the AI snapshot (c_is_focused removed as it's not ready yet)
+            self.event_logger.log_ai_snap(
+                s_category=s_category,
+                s_focus=s_focus,
+                s_is_productive=s_is_productive
+            )
+            
+            print(f"✅ AI_SNAP event logged successfully!")
+            
+        except Exception as e:
+            print(f"🔥 AI event logging error: {e}")
+            import traceback
+            traceback.print_exc()
     
     def run_ai_inference_async(self, interval: int, accountability_mode: str):
         """Run AI inference in background thread"""
