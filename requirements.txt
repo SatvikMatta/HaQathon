@@ -38,9 +38,8 @@ ftfy==6.1.1
 gdown==4.7.1
 gitdb==4.0.12
 GitPython==3.1.42
-gmpy2==2.1.2
 h5py==3.14.0
-hf-xet==1.1.5
+hf-xet==1.1.5  # Commented out - not compatible with Windows ARM64
 huggingface-hub==0.33.4
 humanfriendly==10.0
 idna==3.7
@@ -67,7 +66,6 @@ networkx==3.1
 numcodecs==0.12.1
 numpy==1.26.4
 onnx==1.17.0
-onnxruntime==1.19.2
 opencv-python==4.9.0.80
 packaging==24.0
 pandas==2.2.2
@@ -75,7 +73,6 @@ parso==0.8.4
 pexpect==4.9.0
 pickleshare==0.7.5
 pillow==10.3.0
-pip==24.0
 platformdirs==4.2.2
 pluggy==1.6.0
 prettytable==3.11.0
@@ -93,6 +90,10 @@ pydantic_yaml==1.4.0
 PyGetWindow==0.0.9
 Pygments==2.18.0
 PyMsgBox==1.0.9
+<<<<<<< Updated upstream
+=======
+
+>>>>>>> Stashed changes
 pyparsing==3.1.2
 pyperclip==1.9.0
 PyRect==0.2.0
@@ -103,7 +104,6 @@ python-dateutil==2.9.0
 pytweening==1.2.0
 pytz==2024.1
 PyYAML==6.0.1
-pyzmq==25.1.1
 qai-hub==0.31.0
 qai-hub-models==0.31.0
 regex==2023.10.3
@@ -122,7 +122,6 @@ soupsieve==2.7
 stack-data==0.6.2
 sympy==1.12
 tabulate==0.9.0
-tifffile==2024.5.10
 tomli==2.2.1
 torch==2.3.0
 torchaudio==2.3.0

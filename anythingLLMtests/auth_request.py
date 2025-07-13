@@ -5,7 +5,7 @@ import requests
 url = "http://localhost:3001/api/v1/auth"
 headers = {
     "accept": "application/json",
-    "Authorization": "Bearer 156153F-4J1MSJ2-PZE4NHP-12R60AH"
+    "Authorization": "Bearer N0J6HM4-6DB4CAP-K6WQ0HA-SP35QZ2"
 }
 
 response = requests.get(url, headers=headers)

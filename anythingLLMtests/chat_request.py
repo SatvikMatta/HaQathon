@@ -6,7 +6,7 @@ import json
 # Configuration
 base_url = "http://localhost:3001"
 workspace_slug = "haqathon"  # Replace with your workspace slug
-api_token = "156153F-4J1MSJ2-PZE4NHP-12R60AH"
+api_token = "N0J6HM4-6DB4CAP-K6WQ0HA-SP35QZ2"
 
 # Chat endpoint
 chat_url = f"{base_url}/api/v1/workspace/{workspace_slug}/chat"

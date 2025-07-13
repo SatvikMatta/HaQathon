@@ -7,8 +7,8 @@ import base64
 # Configuration
 base_url = "http://localhost:3001"
 workspace_slug = "haqathon"
-api_token = "156153F-4J1MSJ2-PZE4NHP-12R60AH"
-image_path = "/Users/satvik/Documents/GitHub/HaQathon/screenshot.png"
+api_token = "N0J6HM4-6DB4CAP-K6WQ0HA-SP35QZ2"
+image_path = "anythingLLMtests/chess.png"
 
 headers = {
     "accept": "application/json",
@@ -16,9 +16,9 @@ headers = {
 }
 
 # System prompt for task monitoring
-system_prompt = """Analyze the screenshot content that shows VS Code with Python code for taking screenshots using pyautogui. 
+system_prompt = """Analyze this screenshot image carefully.
 
-Based on this screenshot, is the user working on programming/coding tasks? Answer only 'Yes' or 'No'.
+Based on what you see in this screenshot, is the user working on programming/coding tasks? Answer only 'Yes' or 'No'.
 
 DO NOT ASK QUESTIONS OR CLARIFICATIONS
 DO NOT DO ANYTHING BUT ANSWER 'Yes' or 'No'"""
