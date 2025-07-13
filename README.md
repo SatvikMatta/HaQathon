@@ -9,38 +9,75 @@ A Pomodoro timer with AI-powered focus tracking for Snapdragon X Elite laptops u
 - ✅ Clean terminal interface with progress bars
 - ✅ Thread-safe architecture for future AI integration
 
-## Quick Start
+## Installation
 
-```bash
-# Install dependencies
-pip install -r requirements.txt
+Download AnythingLLM: https://anythingllm.com/desktop
 
-# Run GUI version
-python src/focus_assist_gui.py
+Install AnythingLLM and create a new workspace with the name 'HaQathon'
+
+Click on the Gear Icon:
+
+![Gear Icon Example](./doc_images/gear_logo_example.png)
+
+Make Sure it Looks like this:
+
+![Settings Name](./doc_images/name.png)
+
+Go to the settings wrench at the bottom of the screen:
+
+![Wrench Icon](./doc_images/wrench.png)
+
+Navigate to the Developer API Under the Tools Tab in the Instance Settings:
+
+![Dev API](./doc_images/devApiLLM.png)
+
+Create a new API Key and Copy the Value of the Key:
+
+![API KEY](./doc_images/createkey.png)
+
+Update the .env file in src with the api key
+
+```env
+API_KEY = <YOUR API KEY HERE>
 ```
+
+Now Download the Required Model Files From Qualcomm AI Hub:
+
+[OpenAI-Clip Model](https://aihub.qualcomm.com/compute/models/openai_clip?domain=Multimodal&useCase=Image+Classification)
+
+Click on the Download Model Button:
+
+![Image](./doc_images/clip_model.png)
+
+Make sure to download the ONNX Runtime Version
+
+![Image](./doc_images/clip_model_2.png)
+
+
+Git Clone the Repo:
+```bash
+git clone https://github.com/SatvikMatta/HaQathon.git
+```
+
+Move the downloaded files into the `src` folder.
+
+
+Then run the following commands into the Command Prompt:
+```bash
+cd HaQathon
+install.bat
+```
+
+That's it installation should be done.
+
 
 ## Usage
 
-### Simple Timer
-```python
-from pomodoro import PomodoroTimer, Task, TerminalOutput
+To run the program do the following commands from the `HaQathon` Directory:
 
-tasks = [Task(id="1", title="Work on project", estimated_pomodoros=3)]
-timer = PomodoroTimer(work_seconds=1500, short_break_seconds=300, 
-                      long_break_seconds=900, tasks=tasks)
-output = TerminalOutput()
-
-timer.start()
-while timer.state != timer.state.IDLE:
-    output.update_display(timer)
-```
-
-### GUI Timer
-```python
-from src.focus_assist_gui import FocusAssistApp
-
-app = FocusAssistApp()
-app.run()
+```bash
+cd src
+python focus_assist_gui.py
 ```
 
 ## License
