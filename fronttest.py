@@ -26,7 +26,7 @@ def main():
     screen = Backend.screenshot()
     clip_result = model.classify_single_image(screen, class_labels)
     clip_class = clip_result['predicted_class']
-    print(clip_class)
+    # print(clip_class)
 
     result = get_json_screenshot(screenshot=screen, clip_input=clip_class)
     print(result['classification'])

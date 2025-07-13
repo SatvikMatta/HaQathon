@@ -14,7 +14,13 @@ from typing import List, Optional, Dict, Any
 import json
 import os
 import sys
+# AI Importsom PIL import Image
 from PIL import Image
+import torch
+from PIL import ImageGrab
+from ClipApp import ClipApp, create_clip_app, simple_tokenizer, image_preprocessor
+import Backend
+from Backend import get_json_screenshot, screenshot
 
 # Add src directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -25,6 +31,19 @@ from pomodoro.constants import (
     DEFAULT_WORK_SECONDS, DEFAULT_SHORT_BREAK_SECONDS,
     DEFAULT_LONG_BREAK_SECONDS
 )
+
+def create_qai_hub_clip() -> ClipApp:
+    """Create ClipApp using QAI Hub OpenAI CLIP model"""
+    from qai_hub_models.models.openai_clip.model import OpenAIClip
+    clip_model = OpenAIClip.from_pretrained()
+    app = ClipApp(
+        model=clip_model,
+        text_tokenizer=clip_model.text_tokenizer,
+        image_preprocessor=clip_model.image_preprocessor
+    )
+    return app
+
+model  = create_qai_hub_clip()
 
 # Modern Color Themes
 class Theme:
@@ -2158,11 +2177,18 @@ class FocusAssistApp:
             accountability_mode = self.settings['accountability']['mode']
             print(f"🤖 AI Snapshot triggered (interval: {interval}s, mode: {accountability_mode})")
             
-            # Placeholder for future AI functionality:
-            # - Take screenshot
-            # - Analyze focus level
-            # - Send to AI for analysis
-            # - Apply accountability measures based on mode
+            class_labels = [
+                "code",
+                "games",
+                "video"
+            ]
+            screen = Backend.screenshot()
+            clip_result = model.classify_single_image(screen, class_labels)
+            clip_class = clip_result['predicted_class']
+            print(clip_class)
+
+            result = get_json_screenshot(screenshot=screen, clip_input=clip_class)
+            print(result['classification'])
         else:
             print("🤖 AI Snapshot triggered")
                 

@@ -15,9 +15,6 @@ A Pomodoro timer with AI-powered focus tracking for Snapdragon X Elite laptops u
 # Install dependencies
 pip install -r requirements.txt
 
-# Run simple demo
-python src/example.py
-
 # Run GUI version
 python src/focus_assist_gui.py
 ```
