@@ -167,13 +167,16 @@ Display Updates → Theme System → Component Refresh → User Feedback
 
 ## 🚀 Entry Points
 
+### Shell Requirements
+⚠️ **Important**: Use **PowerShell** commands, not bash. Use semicolon (`;`) for command chaining instead of `&&`.
+
 ### Running the Application
-```bash
+```powershell
 # GUI version (main application)
-cd src && python focus_assist_gui.py
+cd src; python focus_assist_gui.py
 
 # Terminal version (simple demo)
-cd src && python example.py
+cd src; python example.py
 ```
 
 ### Key Classes to Understand

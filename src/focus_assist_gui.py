@@ -311,6 +311,7 @@ class FocusAssistApp:
         
         # Initialize timer state
         self.current_timer_state = None
+        self.last_active_state = TimerState.WORK  # Track last non-paused state for radio buttons
         
         # Start update loop
         self.start_update_loop()
@@ -472,7 +473,8 @@ class FocusAssistApp:
                 value=mode,
                 font=ctk.CTkFont(size=14),
                 text_color=self.current_theme['text_secondary'],
-                width=100  # Fixed width to prevent expansion when bolding
+                width=100,  # Fixed width to prevent expansion when bolding
+                command=lambda m=mode: self.on_mode_button_clicked(m)
             )
             mode_btn.pack(side='left', padx=10)
             self.mode_buttons[mode] = mode_btn
@@ -725,11 +727,8 @@ class FocusAssistApp:
             scrollbar_button_hover_color=self.current_theme['primary']
         )
         
-        # Update timer display
-        self.timer_display_frame.configure(
-            fg_color=self.current_theme['primary'],
-            border_color=self.current_theme['primary']
-        )
+        # Update timer display - don't force primary color here, let state colors handle it
+        # self.timer_display_frame colors will be set by _update_timer_colors_immediate()
         
         # Update timer label
         self.timer_label.configure(text_color="white")
@@ -768,6 +767,12 @@ class FocusAssistApp:
         # Update timer colors if there's a current state
         if hasattr(self, 'current_timer_state') and self.current_timer_state is not None:
             self._update_timer_colors_immediate()
+        else:
+            # If no current state, default to primary colors
+            self.timer_display_frame.configure(
+                fg_color=self.current_theme['primary'],
+                border_color=self.current_theme['primary']
+            )
         
         # Restore normal cursor
         self.root.configure(cursor="")
@@ -1123,6 +1128,36 @@ class FocusAssistApp:
             # This prevents the jarring red color flash since we removed SKIPPED state colors
             self.update_status("Timer interval skipped")
             
+    def on_mode_button_clicked(self, mode: str):
+        """Handle mode button clicks - skip to the selected state"""
+        if not self.timer or not self.is_timer_running:
+            # If timer isn't running, just update the visual selection
+            return
+        
+        # Map mode names to TimerState values
+        mode_to_state = {
+            "Work": TimerState.WORK,
+            "Short Break": TimerState.SHORT_BREAK,
+            "Long Break": TimerState.LONG_BREAK
+        }
+        
+        target_state = mode_to_state.get(mode)
+        if not target_state:
+            return
+            
+        # Check if we're already in the target state
+        if self.timer.state == target_state:
+            return
+            
+        # Skip to the target state using the same logic as skip button
+        # The radio button selection will update naturally when the state changes
+        # through the on_timer_state_changed callback with the same delay as timer
+        if self.timer.skip_to_state(target_state):
+            # Use same status update pattern as skip button
+            self.update_status(f"Timer switched to {mode}")
+        else:
+            self.update_status(f"Failed to switch to {mode}")
+            
     def start_timer_thread(self):
         """Start timer in separate thread"""
         if self.timer_thread and self.timer_thread.is_alive():
@@ -1203,6 +1238,15 @@ class FocusAssistApp:
         """Handle timer state changes"""
         state_text = state.value.replace('_', ' ').title()
         self.update_status(f"Timer state: {state_text}")
+        
+        # Track last active state for radio button highlighting when paused
+        if state in [TimerState.WORK, TimerState.SHORT_BREAK, TimerState.LONG_BREAK]:
+            self.last_active_state = state
+        elif state == TimerState.PAUSED:
+            # When paused, check if timer has updated _pre_pause_state (from skip_to_state)
+            if self.timer and hasattr(self.timer, '_pre_pause_state') and self.timer._pre_pause_state:
+                # Update last_active_state to reflect the new paused state
+                self.last_active_state = self.timer._pre_pause_state
         
         # Sync tasks from timer on every state change to keep GUI updated
         self.sync_tasks_from_timer()
@@ -1346,11 +1390,16 @@ class FocusAssistApp:
                 'secondary': '#E67E22',
                 'display_bg': '#FEF5E7',
                 'border': '#F39C12'
+            },
+            TimerState.SKIPPED: {
+                'primary': '#F39C12',  # Orange (same as pause)
+                'secondary': '#E67E22',
+                'display_bg': '#FEF5E7',
+                'border': '#F39C12'
             }
-            # Removed SKIPPED state colors - will default to work colors for seamless transition
         }
         
-        # Default to work colors if state not found (including SKIPPED)
+        # Default to work colors if state not found
         return state_colors.get(state, state_colors[TimerState.WORK])
     
     def update_timer_colors(self, state: TimerState):
@@ -1390,18 +1439,30 @@ class FocusAssistApp:
         # Fix: Add null check for state
         if state is None:
             return
-            
-        # Get colors for current state
-        colors = self.get_state_colors(state)
         
-        # Highlight the appropriate mode button based on state
+        # Determine which state to highlight on radio buttons
+        display_state = state
+        use_pause_colors = False
+        
+        # If paused or skipped, show the last active state but with pause colors
+        if state in [TimerState.PAUSED, TimerState.SKIPPED]:
+            display_state = self.last_active_state
+            use_pause_colors = True
+            
+        # Get colors for display
+        if use_pause_colors:
+            colors = self.get_state_colors(TimerState.PAUSED)  # Use pause colors (yellow/orange)
+        else:
+            colors = self.get_state_colors(display_state)
+        
+        # Highlight the appropriate mode button based on display state
         mode_mapping = {
             TimerState.WORK: "Work",
             TimerState.SHORT_BREAK: "Short Break", 
             TimerState.LONG_BREAK: "Long Break"
         }
         
-        active_mode = mode_mapping.get(state)
+        active_mode = mode_mapping.get(display_state)
         
         # Update radio button selection and colors
         if active_mode and hasattr(self, 'mode_buttons'):
@@ -1410,7 +1471,7 @@ class FocusAssistApp:
             # Update all mode button colors properly for radio buttons
             for mode_name, mode_btn in self.mode_buttons.items():
                 if mode_name == active_mode:
-                    # Highlight active mode with state color for selector and text - smaller bold font to prevent expansion
+                    # Highlight active mode with appropriate color (normal state or pause color)
                     mode_btn.configure(
                         text_color=colors['primary'],
                         font=ctk.CTkFont(size=13, weight='bold'),  # Smaller bold font to prevent expansion

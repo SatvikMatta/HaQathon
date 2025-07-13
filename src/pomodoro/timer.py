@@ -63,7 +63,8 @@ class PomodoroTimer:
     __slots__ = ('_config', '_tasks', '_current_task_idx', '_completed_pomos', 
                  '_state', '_start_time', '_end_time', 
                  '_lock', '_state_callbacks', '_pre_pause_state', '_paused_remaining',
-                 '_pre_skip_state', '_skipped_remaining', '_skip_display_shown')
+                 '_pre_skip_state', '_skipped_remaining', '_skip_display_shown', '_target_state',
+                 '_start_new_state_paused')
 
     def __init__(
         self,
@@ -99,6 +100,8 @@ class PomodoroTimer:
         self._pre_skip_state: Optional[TimerState] = None
         self._skipped_remaining: Optional[float] = None
         self._skip_display_shown: bool = False
+        self._target_state: Optional[TimerState] = None
+        self._start_new_state_paused: bool = False
         
         # Callback systems
         self._state_callbacks: List[Callable[[TimerState], None]] = []
@@ -227,6 +230,64 @@ class PomodoroTimer:
             print(f"{ErrorMessages.TIMER_SKIP_ERROR}: {e}")
             return False
 
+    def skip_to_state(self, target_state: TimerState) -> bool:
+        """Skip to a specific state. Returns success status."""
+        try:
+            with self._lock:
+                if self._state == target_state:
+                    return True  # Already in target state
+                
+                if self._state not in [TimerState.WORK, TimerState.SHORT_BREAK, TimerState.LONG_BREAK, TimerState.PAUSED]:
+                    return False  # Can't skip from invalid states
+                
+                # Remember if we were paused when we started the skip
+                was_paused = self._state == TimerState.PAUSED
+                self._start_new_state_paused = was_paused
+                
+                # Handle skipping while paused
+                if self._state == TimerState.PAUSED:
+                    # Use the pre-pause state and remaining time
+                    self._pre_skip_state = self._pre_pause_state if self._pre_pause_state else TimerState.WORK
+                    self._skipped_remaining = self._paused_remaining if self._paused_remaining else 0
+                else:
+                    # Store the current state and remaining time before skipping
+                    self._pre_skip_state = self._state
+                    if self._end_time and self._start_time:
+                        now = time.time()
+                        self._skipped_remaining = max(0, self._end_time - now)
+                
+                # Determine if we should complete a pomodoro
+                actual_current_state = self._pre_skip_state if self._state == TimerState.PAUSED else self._state
+                
+                if actual_current_state == TimerState.WORK and target_state in [TimerState.SHORT_BREAK, TimerState.LONG_BREAK]:
+                    # WORK -> BREAK: Complete the pomodoro (same as regular skip)
+                    self._completed_pomos += 1
+                    if self._current_task_idx < len(self._tasks):
+                        current_task = self._tasks[self._current_task_idx]
+                        current_task.completed_pomodoros += 1
+                        
+                        # Check if task is completed
+                        if current_task.completed_pomodoros >= current_task.estimated_pomodoros:
+                            current_task.status = TaskStatus.COMPLETED
+                            self._current_task_idx += 1
+                
+                # Set to SKIPPED state for display (preserves same skip logic)
+                self._state = TimerState.SKIPPED
+                self._skip_display_shown = False  # Reset display flag
+                self._notify_state_change(self._state)
+                
+                # Set end time to allow SKIPPED display to be visible
+                self._end_time = time.time() + SKIP_DISPLAY_DURATION_SECONDS
+                
+                # Store the target state so _handle_interval_completion knows where to go
+                self._target_state = target_state
+                
+                return True
+                
+        except Exception as e:
+            print(f"{ErrorMessages.TIMER_SKIP_ERROR}: {e}")
+            return False
+
     def get_remaining_time(self) -> Optional[timedelta]:
         """Get remaining time in current interval."""
         try:
@@ -253,11 +314,17 @@ class PomodoroTimer:
                     else:
                         # Mark that we've shown the skip display
                         self._skip_display_shown = True
-                        # Return the stored remaining time at skip point
-                        if self._skipped_remaining is not None:
-                            return timedelta(seconds=max(0, self._skipped_remaining))
+                        
+                        # If we have a target state (from skip_to_state), show the full time for that state
+                        if self._target_state:
+                            target_length = self._get_target_state_length()
+                            return timedelta(seconds=target_length)
                         else:
-                            return timedelta(seconds=0)  # Fallback for skipped
+                            # Regular skip - return the stored remaining time at skip point
+                            if self._skipped_remaining is not None:
+                                return timedelta(seconds=max(0, self._skipped_remaining))
+                            else:
+                                return timedelta(seconds=0)  # Fallback for skipped
                 
                 now = time.time()
                 if now >= self._end_time:
@@ -294,49 +361,77 @@ class PomodoroTimer:
             return self._config.long_break_seconds
         return 0
 
+    def _get_target_state_length(self) -> float:
+        """Get the length of the target state interval in seconds."""
+        if not self._target_state:
+            return 0
+            
+        if self._target_state == TimerState.WORK:
+            return self._config.work_seconds
+        elif self._target_state == TimerState.SHORT_BREAK:
+            return self._config.short_break_seconds
+        elif self._target_state == TimerState.LONG_BREAK:
+            return self._config.long_break_seconds
+        return 0
+        
     def _handle_interval_completion(self) -> bool:
         """Handle the completion of a work or break interval."""
         try:
-            # Determine the actual state that was being executed (handle SKIPPED)
-            actual_state = self._state
-            if self._state == TimerState.SKIPPED and self._pre_skip_state:
-                actual_state = self._pre_skip_state
-            
-            if actual_state == TimerState.WORK:
-                # Complete pomodoro
-                self._completed_pomos += 1
-                if self._current_task_idx < len(self._tasks):
-                    current_task = self._tasks[self._current_task_idx]
-                    current_task.completed_pomodoros += 1
-                    
-                    # Check if task is completed
-                    if current_task.completed_pomodoros >= current_task.estimated_pomodoros:
-                        current_task.status = TaskStatus.COMPLETED
-                        self._current_task_idx += 1
-                    
-                # Determine break type
-                if self._completed_pomos % self._config.pomos_before_long_break == 0:
-                    self._state = TimerState.LONG_BREAK
-                else:
-                    self._state = TimerState.SHORT_BREAK
-                    
-            else:  # After break
-                if self._current_task_idx < len(self._tasks):
-                    self._state = TimerState.WORK
-                else:
-                    self._state = TimerState.IDLE
-                    self._notify_state_change(self._state)
-                    return True
+            # Check if we're using skip_to_state with a target state
+            if self._target_state:
+                # Use the target state instead of normal logic
+                self._state = self._target_state
+                # Note: If skip_to_state already handled pomodoro completion, we don't need to do it again
+            else:
+                # Normal completion logic
+                # Determine the actual state that was being executed (handle SKIPPED)
+                actual_state = self._state
+                if self._state == TimerState.SKIPPED and self._pre_skip_state:
+                    actual_state = self._pre_skip_state
+                
+                if actual_state == TimerState.WORK:
+                    # Complete pomodoro
+                    self._completed_pomos += 1
+                    if self._current_task_idx < len(self._tasks):
+                        current_task = self._tasks[self._current_task_idx]
+                        current_task.completed_pomodoros += 1
+                        
+                        # Check if task is completed
+                        if current_task.completed_pomodoros >= current_task.estimated_pomodoros:
+                            current_task.status = TaskStatus.COMPLETED
+                            self._current_task_idx += 1
+                        
+                    # Determine break type
+                    if self._completed_pomos % self._config.pomos_before_long_break == 0:
+                        self._state = TimerState.LONG_BREAK
+                    else:
+                        self._state = TimerState.SHORT_BREAK
+                        
+                else:  # After break
+                    if self._current_task_idx < len(self._tasks):
+                        self._state = TimerState.WORK
+                    else:
+                        self._state = TimerState.IDLE
+                        self._notify_state_change(self._state)
+                        return True
             
             # Clear skip state since we've handled completion
             self._pre_skip_state = None
             self._skipped_remaining = None
             self._skip_display_shown = False
+            self._target_state = None  # Clear target state
                 
             # Start new interval
             now = time.time()
             self._start_time = now
             self._end_time = now + self._get_current_interval_length()
+            
+            # If we were paused when we started the skip, immediately pause the new state
+            if self._start_new_state_paused:
+                self._pre_pause_state = self._state
+                self._paused_remaining = self._end_time - now  # Full duration since we just started
+                self._state = TimerState.PAUSED
+                self._start_new_state_paused = False  # Reset flag
             
             self._notify_state_change(self._state)
             return True
