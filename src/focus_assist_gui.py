@@ -195,14 +195,21 @@ class TaskCard(ctk.CTkFrame):
         progress_frame = ctk.CTkFrame(container, fg_color='transparent')
         progress_frame.pack(fill='x', pady=(0, 8))
         
-        # Progress bar
+        # Progress bar with better contrast for dark mode
         progress_value = self.task.completed_pomodoros / self.task.estimated_pomodoros if self.task.estimated_pomodoros > 0 else 0
+        
+        # Use different background colors for better slot visibility
+        if self.theme == Theme.DARK:
+            progress_bg_color = '#30363D'  # Lighter than card background for visibility
+        else:
+            progress_bg_color = self.theme['bg_tertiary']  # Original light mode color
+            
         self.progress_bar = ctk.CTkProgressBar(
             progress_frame,
             width=200,
             height=8,
             progress_color=self.theme['primary'],
-            fg_color=self.theme['bg_tertiary']
+            fg_color=progress_bg_color
         )
         self.progress_bar.set(progress_value)
         self.progress_bar.pack(side='left', fill='x', expand=True)
@@ -266,12 +273,19 @@ class TaskCard(ctk.CTkFrame):
             return
         
         try:
-            # Update progress bar with current theme colors
+            # Update progress bar with current theme colors and better contrast
             progress_value = self.task.completed_pomodoros / self.task.estimated_pomodoros if self.task.estimated_pomodoros > 0 else 0
             self.progress_bar.set(progress_value)
+            
+            # Use different background colors for better slot visibility
+            if self.theme == Theme.DARK:
+                progress_bg_color = '#30363D'  # Lighter than card background for visibility
+            else:
+                progress_bg_color = self.theme['bg_tertiary']  # Original light mode color
+                
             self.progress_bar.configure(
                 progress_color=self.theme['primary'],
-                fg_color=self.theme['bg_tertiary']
+                fg_color=progress_bg_color
             )
             
             # Update progress text with current theme color
@@ -436,7 +450,7 @@ class FocusAssistApp:
         # Logo image (if available)
         if hasattr(self, 'logo_image') and self.logo_image is not None:
             self.logo_label = ctk.CTkLabel(
-                title_frame,
+            title_frame,
                 image=self.logo_image,
                 text=""
             )
@@ -639,19 +653,19 @@ class FocusAssistApp:
         self.settings_content.grid_columnconfigure(0, weight=1)
         self.settings_content.grid_rowconfigure(0, weight=1)
         
-        # Create scrollable settings frame
-        settings_scroll = ctk.CTkScrollableFrame(
+        # Create scrollable settings frame - store as class attribute
+        self.settings_scroll = ctk.CTkScrollableFrame(
             self.settings_content,
             fg_color=self.current_theme['bg_secondary'],
             corner_radius=16,
             border_width=1,
             border_color=self.current_theme['border']
         )
-        settings_scroll.grid(row=0, column=0, sticky='nsew', padx=20, pady=20)
-        settings_scroll.grid_columnconfigure(0, weight=1)
+        self.settings_scroll.grid(row=0, column=0, sticky='nsew', padx=20, pady=20)
+        self.settings_scroll.grid_columnconfigure(0, weight=1)
         
         # Settings header
-        header_frame = ctk.CTkFrame(settings_scroll, fg_color='transparent')
+        header_frame = ctk.CTkFrame(self.settings_scroll, fg_color='transparent')
         header_frame.grid(row=0, column=0, sticky='ew', pady=(20, 30))
         
         settings_title = ctk.CTkLabel(
@@ -667,13 +681,13 @@ class FocusAssistApp:
             self.initialize_settings()
         
         # Create settings sections
-        self.create_timer_settings_section(settings_scroll)
-        self.create_ai_settings_section(settings_scroll)
-        self.create_accountability_settings_section(settings_scroll)
-        self.create_appearance_settings_section(settings_scroll)
+        self.create_timer_settings_section(self.settings_scroll)
+        self.create_ai_settings_section(self.settings_scroll)
+        self.create_accountability_settings_section(self.settings_scroll)
+        self.create_appearance_settings_section(self.settings_scroll)
         
         # Save button
-        save_frame = ctk.CTkFrame(settings_scroll, fg_color='transparent')
+        save_frame = ctk.CTkFrame(self.settings_scroll, fg_color='transparent')
         save_frame.grid(row=5, column=0, sticky='ew', pady=(30, 20))
         
         save_btn = ctk.CTkButton(
@@ -710,13 +724,14 @@ class FocusAssistApp:
         
     def create_timer_settings_section(self, parent):
         """Create timer settings section"""
-        section_frame = ctk.CTkFrame(parent, fg_color=self.current_theme['card_bg'], corner_radius=12)
-        section_frame.grid(row=1, column=0, sticky='ew', pady=(0, 20), padx=20)
-        section_frame.grid_columnconfigure(1, weight=1)
+        # Store as class attribute for theme updates
+        self.timer_settings_frame = ctk.CTkFrame(parent, fg_color=self.current_theme['card_bg'], corner_radius=12)
+        self.timer_settings_frame.grid(row=1, column=0, sticky='ew', pady=(0, 20), padx=20)
+        self.timer_settings_frame.grid_columnconfigure(1, weight=1)
         
         # Section header
         header_label = ctk.CTkLabel(
-            section_frame,
+            self.timer_settings_frame,
             text="🍅 Timer Settings",
             font=ctk.CTkFont(size=20, weight='bold'),
             text_color=self.current_theme['text_primary']
@@ -725,14 +740,14 @@ class FocusAssistApp:
         
         # Work duration
         work_label = ctk.CTkLabel(
-            section_frame,
+            self.timer_settings_frame,
             text="Work Duration:",
             font=ctk.CTkFont(size=14),
             text_color=self.current_theme['text_secondary']
         )
         work_label.grid(row=1, column=0, sticky='w', padx=20, pady=5)
         
-        work_frame = ctk.CTkFrame(section_frame, fg_color='transparent')
+        work_frame = ctk.CTkFrame(self.timer_settings_frame, fg_color='transparent')
         work_frame.grid(row=1, column=1, sticky='ew', padx=20, pady=5)
         
         self.work_minutes_slider = ctk.CTkSlider(
@@ -757,14 +772,14 @@ class FocusAssistApp:
         
         # Short break duration
         short_break_label = ctk.CTkLabel(
-            section_frame,
+            self.timer_settings_frame,
             text="Short Break:",
             font=ctk.CTkFont(size=14),
             text_color=self.current_theme['text_secondary']
         )
         short_break_label.grid(row=2, column=0, sticky='w', padx=20, pady=5)
         
-        short_break_frame = ctk.CTkFrame(section_frame, fg_color='transparent')
+        short_break_frame = ctk.CTkFrame(self.timer_settings_frame, fg_color='transparent')
         short_break_frame.grid(row=2, column=1, sticky='ew', padx=20, pady=5)
         
         self.short_break_slider = ctk.CTkSlider(
@@ -789,14 +804,14 @@ class FocusAssistApp:
         
         # Long break duration
         long_break_label = ctk.CTkLabel(
-            section_frame,
+            self.timer_settings_frame,
             text="Long Break:",
             font=ctk.CTkFont(size=14),
             text_color=self.current_theme['text_secondary']
         )
         long_break_label.grid(row=3, column=0, sticky='w', padx=20, pady=(5, 20))
         
-        long_break_frame = ctk.CTkFrame(section_frame, fg_color='transparent')
+        long_break_frame = ctk.CTkFrame(self.timer_settings_frame, fg_color='transparent')
         long_break_frame.grid(row=3, column=1, sticky='ew', padx=20, pady=(5, 20))
         
         self.long_break_slider = ctk.CTkSlider(
@@ -821,13 +836,14 @@ class FocusAssistApp:
         
     def create_ai_settings_section(self, parent):
         """Create AI settings section"""
-        section_frame = ctk.CTkFrame(parent, fg_color=self.current_theme['card_bg'], corner_radius=12)
-        section_frame.grid(row=2, column=0, sticky='ew', pady=(0, 20), padx=20)
-        section_frame.grid_columnconfigure(1, weight=1)
+        # Store as class attribute for theme updates
+        self.ai_settings_frame = ctk.CTkFrame(parent, fg_color=self.current_theme['card_bg'], corner_radius=12)
+        self.ai_settings_frame.grid(row=2, column=0, sticky='ew', pady=(0, 20), padx=20)
+        self.ai_settings_frame.grid_columnconfigure(1, weight=1)
         
         # Section header
         header_label = ctk.CTkLabel(
-            section_frame,
+            self.ai_settings_frame,
             text="🤖 AI Monitoring Settings",
             font=ctk.CTkFont(size=20, weight='bold'),
             text_color=self.current_theme['text_primary']
@@ -836,14 +852,14 @@ class FocusAssistApp:
         
         # Check-in interval
         checkin_label = ctk.CTkLabel(
-            section_frame,
+            self.ai_settings_frame,
             text="Check-in Interval:",
             font=ctk.CTkFont(size=14),
             text_color=self.current_theme['text_secondary']
         )
         checkin_label.grid(row=1, column=0, sticky='w', padx=20, pady=(5, 20))
         
-        checkin_frame = ctk.CTkFrame(section_frame, fg_color='transparent')
+        checkin_frame = ctk.CTkFrame(self.ai_settings_frame, fg_color='transparent')
         checkin_frame.grid(row=1, column=1, sticky='ew', padx=20, pady=(5, 20))
         
         self.checkin_slider = ctk.CTkSlider(
@@ -868,12 +884,13 @@ class FocusAssistApp:
         
     def create_accountability_settings_section(self, parent):
         """Create accountability settings section"""
-        section_frame = ctk.CTkFrame(parent, fg_color=self.current_theme['card_bg'], corner_radius=12)
-        section_frame.grid(row=3, column=0, sticky='ew', pady=(0, 20), padx=20)
-        section_frame.grid_columnconfigure(1, weight=1)
+        # Store as class attribute for theme updates
+        self.accountability_settings_frame = ctk.CTkFrame(parent, fg_color=self.current_theme['card_bg'], corner_radius=12)
+        self.accountability_settings_frame.grid(row=3, column=0, sticky='ew', pady=(0, 20), padx=20)
+        self.accountability_settings_frame.grid_columnconfigure(1, weight=1)
         
         # Section header with tooltip
-        header_frame = ctk.CTkFrame(section_frame, fg_color='transparent')
+        header_frame = ctk.CTkFrame(self.accountability_settings_frame, fg_color='transparent')
         header_frame.grid(row=0, column=0, columnspan=2, sticky='ew', padx=20, pady=(20, 15))
         
         header_label = ctk.CTkLabel(
@@ -900,14 +917,14 @@ class FocusAssistApp:
         
         # Mode selection
         mode_label = ctk.CTkLabel(
-            section_frame,
+            self.accountability_settings_frame,
             text="Mode:",
             font=ctk.CTkFont(size=14),
             text_color=self.current_theme['text_secondary']
         )
         mode_label.grid(row=1, column=0, sticky='w', padx=20, pady=(5, 20))
         
-        mode_frame = ctk.CTkFrame(section_frame, fg_color='transparent')
+        mode_frame = ctk.CTkFrame(self.accountability_settings_frame, fg_color='transparent')
         mode_frame.grid(row=1, column=1, sticky='ew', padx=20, pady=(5, 20))
         
         self.accountability_mode = ctk.CTkOptionMenu(
@@ -925,13 +942,14 @@ class FocusAssistApp:
         
     def create_appearance_settings_section(self, parent):
         """Create appearance settings section"""
-        section_frame = ctk.CTkFrame(parent, fg_color=self.current_theme['card_bg'], corner_radius=12)
-        section_frame.grid(row=4, column=0, sticky='ew', pady=(0, 20), padx=20)
-        section_frame.grid_columnconfigure(1, weight=1)
+        # Store as class attribute for theme updates
+        self.appearance_settings_frame = ctk.CTkFrame(parent, fg_color=self.current_theme['card_bg'], corner_radius=12)
+        self.appearance_settings_frame.grid(row=4, column=0, sticky='ew', pady=(0, 20), padx=20)
+        self.appearance_settings_frame.grid_columnconfigure(1, weight=1)
         
         # Section header
         header_label = ctk.CTkLabel(
-            section_frame,
+            self.appearance_settings_frame,
             text="🎨 Appearance",
             font=ctk.CTkFont(size=20, weight='bold'),
             text_color=self.current_theme['text_primary']
@@ -940,14 +958,14 @@ class FocusAssistApp:
         
         # Dark mode toggle
         dark_mode_label = ctk.CTkLabel(
-            section_frame,
+            self.appearance_settings_frame,
             text="Dark Mode:",
             font=ctk.CTkFont(size=14),
             text_color=self.current_theme['text_secondary']
         )
         dark_mode_label.grid(row=1, column=0, sticky='w', padx=20, pady=(5, 20))
         
-        dark_mode_frame = ctk.CTkFrame(section_frame, fg_color='transparent')
+        dark_mode_frame = ctk.CTkFrame(self.appearance_settings_frame, fg_color='transparent')
         dark_mode_frame.grid(row=1, column=1, sticky='ew', padx=20, pady=(5, 20))
         
         self.settings_dark_mode_var = ctk.BooleanVar(value=self.settings['appearance']['dark_mode'])
@@ -1462,154 +1480,387 @@ class FocusAssistApp:
         self.schedule_update('theme')
     
     def _apply_theme_immediate(self):
-        """Apply current theme to all widgets immediately with optimized updates"""
-        # Disable updates during theme change to prevent partial rendering
-        self.root.configure(cursor="watch")  # Show loading cursor
+        """Apply current theme to all widgets immediately with comprehensive error handling"""
+        theme_errors = []
+        
+        try:
+            # Show loading cursor
+            self.root.configure(cursor="watch")
         
         # Update root window
-        self.root.configure(fg_color=self.current_theme['bg_primary'])
+            self._safe_widget_update(self.root, 'root', {
+                'fg_color': self.current_theme['bg_primary']
+            }, theme_errors)
         
         # Update main container
-        self.main_container.configure(fg_color='transparent')
-        
-        # Update header container
-        if hasattr(self, 'header_container'):
-            # Find and update the header container
-            for child in self.main_container.winfo_children():
-                if isinstance(child, ctk.CTkFrame) and child.winfo_height() > 100:  # Likely the header
-                    child.configure(
-                        fg_color=self.current_theme['bg_secondary'],
-                        border_color=self.current_theme['border']
-                    )
-                    break
+            self._safe_widget_update(self.main_container, 'main_container', {
+                'fg_color': 'transparent'
+            }, theme_errors)
+            
+            # Update header container - find by searching children
+            self._update_header_container(theme_errors)
         
         # Update header elements
-        if hasattr(self, 'title_label'):
-            self.title_label.configure(text_color=self.current_theme['primary'])
-        # Dark mode toggle moved to settings tab
-        
-        # Update navigation tabs and settings button
-        if hasattr(self, 'nav_buttons'):
-            self.update_tab_buttons()
-        
-        # Update settings button theme
-        if hasattr(self, 'settings_button'):
-            if self.current_tab == "Settings":
-                self.settings_button.configure(
-                    fg_color=self.current_theme['primary'],
-                    hover_color=self.current_theme['primary_hover'],
-                    text_color="white"
-                )
+            self._update_header_elements(theme_errors)
+            
+            # Update navigation tabs and settings button
+            self._update_navigation_elements(theme_errors)
+            
+            # Update main content panels
+            self._update_main_panels(theme_errors)
+            
+            # Update timer elements
+            self._update_timer_elements(theme_errors)
+            
+            # Update task elements
+            self._update_task_elements(theme_errors)
+            
+            # Update button elements
+            self._update_button_elements(theme_errors)
+            
+            # Update mode buttons
+            self._update_mode_buttons(theme_errors)
+            
+            # Update status bar
+            self._update_status_bar(theme_errors)
+            
+            # Update task cards
+            self._update_task_cards_theme()
+            
+            # Update timer colors based on current state
+            self._update_timer_state_colors(theme_errors)
+            
+            # Update all content tabs regardless of visibility
+            self._update_settings_tab_theme(theme_errors)
+            self._update_stats_tab_theme(theme_errors)
+            
+        except Exception as e:
+            theme_errors.append(f"Critical theme application error: {e}")
+            
+        finally:
+            # Restore normal cursor
+            try:
+                self.root.configure(cursor="")
+            except:
+                pass
+            
+            # Report any errors that occurred
+            if theme_errors:
+                print(f"Theme transition warnings ({len(theme_errors)}):")
+                for error in theme_errors:
+                    print(f"  - {error}")
+                    
+    def _safe_widget_update(self, widget, widget_name: str, properties: dict, error_list: list):
+        """Safely update widget properties with error tracking"""
+        try:
+            if widget and hasattr(widget, 'winfo_exists') and widget.winfo_exists():
+                widget.configure(**properties)
+                return True
             else:
-                self.settings_button.configure(
-                    fg_color='transparent',
-                    hover_color=self.current_theme['bg_tertiary'],
-                    text_color=self.current_theme['text_secondary'],
-                    border_color=self.current_theme['border']
-                )
+                error_list.append(f"{widget_name} does not exist or is destroyed")
+                return False
+        except Exception as e:
+            error_list.append(f"{widget_name} update failed: {e}")
+            return False
+            
+    def _update_header_container(self, error_list: list):
+        """Update header container with improved detection"""
+        try:
+            # Look for header container by searching main container children
+            for child in self.main_container.winfo_children():
+                if isinstance(child, ctk.CTkFrame):
+                    # Check if this looks like a header (has certain height characteristics)
+                    try:
+                        height = child.winfo_reqheight()
+                        if height > 80:  # Likely the header
+                            self._safe_widget_update(child, 'header_container', {
+                                'fg_color': self.current_theme['bg_secondary'],
+                                'border_color': self.current_theme['border']
+                            }, error_list)
+                            break
+                    except:
+                        continue
+        except Exception as e:
+            error_list.append(f"Header container update failed: {e}")
+            
+    def _update_header_elements(self, error_list: list):
+        """Update header elements like title and logo"""
+        # Update title label
+        if hasattr(self, 'title_label'):
+            self._safe_widget_update(self.title_label, 'title_label', {
+                'text_color': self.current_theme['primary']
+            }, error_list)
+            
+    def _update_navigation_elements(self, error_list: list):
+        """Update navigation tabs and settings button"""
+        # Update navigation tabs
+        if hasattr(self, 'nav_buttons'):
+            try:
+                self.update_tab_buttons()
+            except Exception as e:
+                error_list.append(f"Navigation tabs update failed: {e}")
         
+        # Update settings button
+        if hasattr(self, 'settings_button'):
+            try:
+                if hasattr(self, 'current_tab') and self.current_tab == "Settings":
+                    self._safe_widget_update(self.settings_button, 'settings_button', {
+                        'fg_color': self.current_theme['primary'],
+                        'hover_color': self.current_theme['primary_hover'],
+                        'text_color': "white",
+                        'border_width': 0
+                    }, error_list)
+                else:
+                    self._safe_widget_update(self.settings_button, 'settings_button', {
+                        'fg_color': 'transparent',
+                        'hover_color': self.current_theme['bg_tertiary'],
+                        'text_color': self.current_theme['text_secondary'],
+                        'border_width': 1,
+                        'border_color': self.current_theme['border']
+                    }, error_list)
+            except Exception as e:
+                error_list.append(f"Settings button update failed: {e}")
+                
+    def _update_main_panels(self, error_list: list):
+        """Update main content panels"""
         # Update timer panel
-        self.timer_panel.configure(
-            fg_color=self.current_theme['bg_secondary'],
-            border_color=self.current_theme['border']
-        )
+        if hasattr(self, 'timer_panel'):
+            self._safe_widget_update(self.timer_panel, 'timer_panel', {
+                'fg_color': self.current_theme['bg_secondary'],
+                'border_color': self.current_theme['border']
+            }, error_list)
         
         # Update tasks panel
-        self.tasks_panel.configure(
-            fg_color=self.current_theme['bg_secondary'],
-            border_color=self.current_theme['border']
-        )
-        
-        # Update tasks header
-        for widget in self.tasks_panel.winfo_children():
-            if isinstance(widget, ctk.CTkFrame):
-                for child in widget.winfo_children():
-                    if isinstance(child, ctk.CTkLabel):
-                        child.configure(text_color=self.current_theme['text_primary'])
-                    elif isinstance(child, ctk.CTkButton):
-                        child.configure(
-                            fg_color=self.current_theme['secondary'],
-                            hover_color=self.current_theme['secondary_hover']
-                        )
-        
-        # Update tasks scroll frame background and scrollbar colors to prevent dark blocks
-        self.tasks_scroll_frame.configure(
-            fg_color='transparent',
-            scrollbar_button_color=self.current_theme['text_muted'],
-            scrollbar_button_hover_color=self.current_theme['primary']
-        )
-        
-        # Update timer display - don't force primary color here, let state colors handle it
-        # self.timer_display_frame colors will be set by _update_timer_colors_immediate()
-        
+        if hasattr(self, 'tasks_panel'):
+            self._safe_widget_update(self.tasks_panel, 'tasks_panel', {
+                'fg_color': self.current_theme['bg_secondary'],
+                'border_color': self.current_theme['border']
+            }, error_list)
+            
+    def _update_timer_elements(self, error_list: list):
+        """Update timer display elements"""
         # Update timer label
         if hasattr(self, 'timer_label'):
-            try:
-                if self.timer_label.winfo_exists():
-                    self.timer_label.configure(text_color="white")
-            except Exception:
-                pass
+            self._safe_widget_update(self.timer_label, 'timer_label', {
+                'text_color': "white"
+            }, error_list)
         
-        # Update text labels in current task display
+        # Update current task labels
         if hasattr(self, 'current_task_title'):
-            try:
-                if self.current_task_title.winfo_exists():
-                    self.current_task_title.configure(text_color=self.current_theme['text_muted'])
-            except Exception:
-                pass
-        
+            self._safe_widget_update(self.current_task_title, 'current_task_title', {
+                'text_color': self.current_theme['text_muted']
+            }, error_list)
+            
         if hasattr(self, 'current_task_label'):
-            try:
-                if self.current_task_label.winfo_exists():
-                    self.current_task_label.configure(text_color=self.current_theme['text_primary'])
-            except Exception:
-                pass
+            self._safe_widget_update(self.current_task_label, 'current_task_label', {
+                'text_color': self.current_theme['text_primary']
+            }, error_list)
+            
+    def _update_task_elements(self, error_list: list):
+        """Update task-related elements"""
+        # Update tasks scroll frame
+        if hasattr(self, 'tasks_scroll_frame'):
+            self._safe_widget_update(self.tasks_scroll_frame, 'tasks_scroll_frame', {
+                'fg_color': 'transparent',
+                'scrollbar_button_color': self.current_theme['text_muted'],
+                'scrollbar_button_hover_color': self.current_theme['primary']
+            }, error_list)
         
-        # Update buttons
-        self.start_pause_btn.configure(
-            fg_color=self.current_theme['primary'],
-            hover_color=self.current_theme['primary_hover']
-        )
-        
-        # Update mode buttons with proper colors for visibility
-        for mode_name, mode_btn in self.mode_buttons.items():
-            mode_btn.configure(
-                text_color=self.current_theme['text_primary'],
-                hover_color=self.current_theme['bg_tertiary']
-            )
-        
-        # Update status bar
-        if hasattr(self, 'status_label'):
-            try:
-                if self.status_label.winfo_exists():
-                    self.status_label.configure(text_color=self.current_theme['text_muted'])
-            except Exception:
-                pass
-        
-        # Update empty state text if it exists and is valid
+        # Update empty state text - check if it exists and is not destroyed
         if hasattr(self, 'empty_text'):
             try:
                 if self.empty_text.winfo_exists():
-                    self.empty_text.configure(text_color=self.current_theme['text_muted'])
-            except Exception:
-                # Widget may have been destroyed, skip safely
-                pass
+                    self._safe_widget_update(self.empty_text, 'empty_text', {
+                        'text_color': self.current_theme['text_muted']
+                    }, error_list)
+            except Exception as e:
+                error_list.append(f"Empty text update failed: {e}")
+            
+        # Update tasks header and buttons
+        if hasattr(self, 'tasks_panel'):
+            try:
+                for widget in self.tasks_panel.winfo_children():
+                    if isinstance(widget, ctk.CTkFrame):
+                        for child in widget.winfo_children():
+                            if isinstance(child, ctk.CTkLabel):
+                                self._safe_widget_update(child, 'tasks_header_label', {
+                                    'text_color': self.current_theme['text_primary']
+                                }, error_list)
+                            elif isinstance(child, ctk.CTkButton):
+                                self._safe_widget_update(child, 'tasks_header_button', {
+                                    'fg_color': self.current_theme['secondary'],
+                                    'hover_color': self.current_theme['secondary_hover']
+                                }, error_list)
+            except Exception as e:
+                error_list.append(f"Tasks header update failed: {e}")
+                
+    def _update_button_elements(self, error_list: list):
+        """Update button elements"""
+        # Update start/pause button
+        if hasattr(self, 'start_pause_btn'):
+            self._safe_widget_update(self.start_pause_btn, 'start_pause_btn', {
+                'fg_color': self.current_theme['primary'],
+                'hover_color': self.current_theme['primary_hover']
+            }, error_list)
+            
+        # Update other timer control buttons
+        if hasattr(self, 'stop_btn'):
+            self._safe_widget_update(self.stop_btn, 'stop_btn', {
+                'text_color': self.current_theme['text_secondary'],
+                'hover_color': self.current_theme['bg_tertiary'],
+                'border_color': self.current_theme['border']
+            }, error_list)
+            
+        if hasattr(self, 'skip_btn'):
+            self._safe_widget_update(self.skip_btn, 'skip_btn', {
+                'text_color': self.current_theme['text_secondary'],
+                'hover_color': self.current_theme['bg_tertiary'],
+                'border_color': self.current_theme['border']
+            }, error_list)
+            
+    def _update_mode_buttons(self, error_list: list):
+        """Update mode buttons with proper theming"""
+        if hasattr(self, 'mode_buttons'):
+            try:
+                for mode_name, mode_btn in self.mode_buttons.items():
+                    self._safe_widget_update(mode_btn, f'mode_button_{mode_name}', {
+                        'text_color': self.current_theme['text_primary'],
+                        'hover_color': self.current_theme['bg_tertiary']
+                    }, error_list)
+            except Exception as e:
+                error_list.append(f"Mode buttons update failed: {e}")
+                
+    def _update_status_bar(self, error_list: list):
+        """Update status bar elements"""
+        if hasattr(self, 'status_label'):
+            self._safe_widget_update(self.status_label, 'status_label', {
+                'text_color': self.current_theme['text_muted']
+            }, error_list)
+            
+    def _update_timer_state_colors(self, error_list: list):
+        """Update timer display colors based on current state"""
+        try:
+            if hasattr(self, 'current_timer_state') and self.current_timer_state is not None:
+                self._update_timer_colors_immediate()
+            else:
+                # If no current state, use primary colors
+                if hasattr(self, 'timer_display_frame'):
+                    self._safe_widget_update(self.timer_display_frame, 'timer_display_frame', {
+                        'fg_color': self.current_theme['primary'],
+                        'border_color': self.current_theme['primary']
+                    }, error_list)
+        except Exception as e:
+            error_list.append(f"Timer state colors update failed: {e}")
+            
+    def _update_settings_tab_theme(self, error_list: list):
+        """Update settings tab specific elements"""
+        # Update settings content frame
+        if hasattr(self, 'settings_content'):
+            self._safe_widget_update(self.settings_content, 'settings_content', {
+                'fg_color': 'transparent'
+            }, error_list)
         
-        # Efficiently update task cards without full recreation
-        self._update_task_cards_theme()
+        # Update settings scroll frame
+        if hasattr(self, 'settings_scroll'):
+            self._safe_widget_update(self.settings_scroll, 'settings_scroll', {
+                'fg_color': self.current_theme['bg_secondary'],
+                'border_color': self.current_theme['border']
+            }, error_list)
         
-        # Update timer colors if there's a current state
-        if hasattr(self, 'current_timer_state') and self.current_timer_state is not None:
-            self._update_timer_colors_immediate()
-        else:
-            # If no current state, default to primary colors
-            self.timer_display_frame.configure(
-                fg_color=self.current_theme['primary'],
-                border_color=self.current_theme['primary']
-            )
+        # Update settings section frames directly using stored references
+        settings_frames = [
+            ('timer_settings_frame', 'Timer Settings Frame'),
+            ('ai_settings_frame', 'AI Settings Frame'),
+            ('accountability_settings_frame', 'Accountability Settings Frame'),
+            ('appearance_settings_frame', 'Appearance Settings Frame')
+        ]
         
-        # Restore normal cursor
-        self.root.configure(cursor="")
+        for frame_attr, frame_name in settings_frames:
+            if hasattr(self, frame_attr):
+                frame = getattr(self, frame_attr)
+                self._safe_widget_update(frame, frame_name, {
+                    'fg_color': self.current_theme['card_bg']
+                }, error_list)
+                
+                # Update all text labels within each settings frame
+                try:
+                    for child in frame.winfo_children():
+                        if isinstance(child, ctk.CTkLabel):
+                            # Update header labels
+                            if "Settings" in child.cget("text") or "🍅" in child.cget("text") or "🤖" in child.cget("text") or "⚖️" in child.cget("text") or "🎨" in child.cget("text"):
+                                child.configure(text_color=self.current_theme['text_primary'])
+                            else:
+                                # Update regular labels
+                                child.configure(text_color=self.current_theme['text_secondary'])
+                        elif isinstance(child, ctk.CTkFrame):
+                            # Update labels within sub-frames
+                            for subchild in child.winfo_children():
+                                if isinstance(subchild, ctk.CTkLabel):
+                                    if "min" in subchild.cget("text") or "s" in subchild.cget("text"):
+                                        subchild.configure(text_color=self.current_theme['text_primary'])
+                                    else:
+                                        subchild.configure(text_color=self.current_theme['text_secondary'])
+                except Exception as e:
+                    error_list.append(f"Settings text update failed for {frame_name}: {e}")
+        
+        # Update settings widgets
+        settings_widgets = [
+            ('work_minutes_slider', {'fg_color': self.current_theme['bg_tertiary']}),
+            ('short_break_slider', {'fg_color': self.current_theme['bg_tertiary']}),
+            ('long_break_slider', {'fg_color': self.current_theme['bg_tertiary']}),
+            ('checkin_slider', {'fg_color': self.current_theme['bg_tertiary']}),
+            ('work_minutes_label', {'text_color': self.current_theme['text_primary']}),
+            ('short_break_label', {'text_color': self.current_theme['text_primary']}),
+            ('long_break_label', {'text_color': self.current_theme['text_primary']}),
+            ('checkin_label', {'text_color': self.current_theme['text_primary']}),
+        ]
+        
+        for widget_name, properties in settings_widgets:
+            if hasattr(self, widget_name):
+                widget = getattr(self, widget_name)
+                self._safe_widget_update(widget, widget_name, properties, error_list)
+                
+        # Update settings option menu
+        if hasattr(self, 'accountability_mode'):
+            self._safe_widget_update(self.accountability_mode, 'accountability_mode', {
+                'fg_color': self.current_theme['bg_tertiary'],
+                'button_color': self.current_theme['primary'],
+                'button_hover_color': self.current_theme['primary_hover'],
+                'text_color': self.current_theme['text_primary']
+            }, error_list)
+            
+        # Update settings dark mode toggle text
+        if hasattr(self, 'settings_dark_mode_toggle'):
+            self._safe_widget_update(self.settings_dark_mode_toggle, 'settings_dark_mode_toggle', {
+                'text_color': self.current_theme['text_secondary']
+            }, error_list)
+    
+    def _update_stats_tab_theme(self, error_list: list):
+        """Update stats tab specific elements"""
+        # Update stats content frame
+        if hasattr(self, 'stats_content'):
+            self._safe_widget_update(self.stats_content, 'stats_content', {
+                'fg_color': 'transparent'
+            }, error_list)
+            
+        # Update stats content children
+        try:
+            if hasattr(self, 'stats_content'):
+                for widget in self.stats_content.winfo_children():
+                    if isinstance(widget, ctk.CTkFrame):
+                        widget.configure(
+                            fg_color=self.current_theme['bg_secondary'],
+                            border_color=self.current_theme['border']
+                        )
+                        
+                        # Update labels within stats frame
+                        for child in widget.winfo_children():
+                            if isinstance(child, ctk.CTkLabel):
+                                child.configure(
+                                    text_color=self.current_theme['text_primary']
+                                )
+        except Exception as e:
+            error_list.append(f"Stats frame update failed: {e}")
     
     def _update_task_cards_theme(self):
         """Efficiently update task card themes without full recreation"""
@@ -2175,16 +2426,21 @@ class FocusAssistApp:
             if hasattr(self, 'start_pause_btn') and self.is_timer_running:
                 self.start_pause_btn.configure(text="PAUSE")
     
-    def get_clip_inference(self, screenshot: Image):
+    def get_clip_inference(self, screenshot: Image.Image):
+        global session, tokenizer, img_name, txt_name, out_name
+        if session is None:
+            init_clip()
+        if session is None:
+            return "unknown"
         img_tensor = preprocess_image(screenshot)
         
         labels = [
         "a web browser",
-        "a code editor" 
+        "a code editor", 
         "a terminal", 
         "a YouTube video", 
         "a game", 
-        "a cat", 
+        "an academic paper", 
         "a spreadsheet"
         ]
 
@@ -2194,7 +2450,7 @@ class FocusAssistApp:
             sim = session.run([out_name],
                         {img_name: img_tensor,
                             txt_name: txt_tensor})[0]        # (1,1) ×100
-            scores.append(float(sim.squeeze()))
+            scores.append(float(np.array(sim).squeeze()))
 
         scores = np.array(scores)
         probs  = np.exp(scores/100 - scores.max()/100)
@@ -2269,7 +2525,7 @@ class FocusAssistApp:
                     changes_made = True
                     gui_task.completed_pomodoros = timer_task.completed_pomodoros
                     gui_task.status = timer_task.status
-                    
+                
         # Sync current task index
         if self.current_task_index != self.timer.current_task_idx:
             changes_made = True
@@ -2716,8 +2972,8 @@ def init_clip() -> None:
 def main():
     """Main entry point"""
     try:
-        app = FocusAssistApp()
         init_clip()
+        app = FocusAssistApp()
         app.run()
     except Exception as e:
         print(f"Error starting Focus Assist: {e}")
