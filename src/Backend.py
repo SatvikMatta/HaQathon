@@ -27,7 +27,7 @@ WORKSPACE_SLUG = "haqathon"
 API_TOKEN = "EG6KWET-JB7MRZT-PEVAWQ1-PWVJ88Q"
 
 
-def classify_task(task) -> str:
+def classify_task(task) -> Dict[str, Any]:
     system_prompt = f"""
     Here is the Task: {task}
     Classify the task as one of the following:

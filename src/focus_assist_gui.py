@@ -2426,16 +2426,21 @@ class FocusAssistApp:
             if hasattr(self, 'start_pause_btn') and self.is_timer_running:
                 self.start_pause_btn.configure(text="PAUSE")
     
-    def get_clip_inference(self, screenshot: Image):
+    def get_clip_inference(self, screenshot: Image.Image):
+        global session, tokenizer, img_name, txt_name, out_name
+        if session is None:
+            init_clip()
+        if session is None:
+            return "unknown"
         img_tensor = preprocess_image(screenshot)
         
         labels = [
         "a web browser",
-        "a code editor" 
+        "a code editor", 
         "a terminal", 
         "a YouTube video", 
         "a game", 
-        "a cat", 
+        "an academic paper", 
         "a spreadsheet"
         ]
 
@@ -2445,7 +2450,7 @@ class FocusAssistApp:
             sim = session.run([out_name],
                         {img_name: img_tensor,
                             txt_name: txt_tensor})[0]        # (1,1) ×100
-            scores.append(float(sim.squeeze()))
+            scores.append(float(np.array(sim).squeeze()))
 
         scores = np.array(scores)
         probs  = np.exp(scores/100 - scores.max()/100)
@@ -2967,8 +2972,8 @@ def init_clip() -> None:
 def main():
     """Main entry point"""
     try:
-        app = FocusAssistApp()
         init_clip()
+        app = FocusAssistApp()
         app.run()
     except Exception as e:
         print(f"Error starting Focus Assist: {e}")
