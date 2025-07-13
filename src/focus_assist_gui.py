@@ -14,13 +14,13 @@ from typing import List, Optional, Dict, Any
 import json
 import os
 import sys
-# AI Importsom PIL import Image
+# AI Imports
 from PIL import Image
-import torch
-from PIL import ImageGrab
-from ClipApp import ClipApp, create_clip_app, simple_tokenizer, image_preprocessor
 import Backend
 from Backend import get_json_screenshot, screenshot
+
+# from ClipApp import ClipApp
+from ClipAppOnnx import *
 
 # Add src directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -32,18 +32,27 @@ from pomodoro.constants import (
     DEFAULT_LONG_BREAK_SECONDS
 )
 
-def create_qai_hub_clip() -> ClipApp:
-    """Create ClipApp using QAI Hub OpenAI CLIP model"""
-    from qai_hub_models.models.openai_clip.model import OpenAIClip
-    clip_model = OpenAIClip.from_pretrained()
-    app = ClipApp(
-        model=clip_model,
-        text_tokenizer=clip_model.text_tokenizer,
-        image_preprocessor=clip_model.image_preprocessor
-    )
-    return app
+# global variables
+session = None
+tokenizer = None
+pil_shot = None
+img_name = None                 # "images"
+txt_name = None              # "texts"
+out_name = None             # "similarities"
 
-model  = create_qai_hub_clip()
+
+# def create_qai_hub_clip() -> ClipApp:
+#     """Create ClipApp using QAI Hub OpenAI CLIP model"""
+#     from qai_hub_models.models.openai_clip.model import OpenAIClip
+#     clip_model = OpenAIClip.from_pretrained()
+#     app = ClipApp(
+#         model=clip_model,
+#         text_tokenizer=clip_model.text_tokenizer,
+#         image_preprocessor=clip_model.image_preprocessor
+#     )
+#     return app
+
+# model  = create_qai_hub_clip()
 
 # Modern Color Themes
 class Theme:
@@ -2166,6 +2175,34 @@ class FocusAssistApp:
             if hasattr(self, 'start_pause_btn') and self.is_timer_running:
                 self.start_pause_btn.configure(text="PAUSE")
     
+    def get_clip_inference(self, screenshot: Image):
+        img_tensor = preprocess_image(screenshot)
+        
+        labels = [
+        "a web browser",
+        "a code editor" 
+        "a terminal", 
+        "a YouTube video", 
+        "a game", 
+        "a cat", 
+        "a spreadsheet"
+        ]
+
+        scores = []
+        for lbl in labels:
+            txt_tensor = encode_text(tokenizer,lbl)
+            sim = session.run([out_name],
+                        {img_name: img_tensor,
+                            txt_name: txt_tensor})[0]        # (1,1) ×100
+            scores.append(float(sim.squeeze()))
+
+        scores = np.array(scores)
+        probs  = np.exp(scores/100 - scores.max()/100)
+        probs /= probs.sum()
+
+        best = int(scores.argmax())
+        return labels[best]
+    
     def on_ai_snapshot_triggered(self):
         """Handle AI snapshot intervals - placeholder for future AI integration"""
         # TODO: Implement AI monitoring functionality here
@@ -2183,8 +2220,7 @@ class FocusAssistApp:
                 "video"
             ]
             screen = Backend.screenshot()
-            clip_result = model.classify_single_image(screen, class_labels)
-            clip_class = clip_result['predicted_class']
+            clip_class = self.get_clip_inference(screenshot=screen)
             print(clip_class)
 
             result = get_json_screenshot(screenshot=screen, clip_input=clip_class)
@@ -2655,10 +2691,33 @@ class TaskDialog:
         error_dialog.bind('<Return>', lambda event: error_dialog.destroy())
         error_dialog.bind('<KP_Enter>', lambda event: error_dialog.destroy())
 
+def init_clip() -> None:
+    """
+    Initialise the CLIP ONNX session, tokenizer and some helper names,
+    then store everything in module-level globals so other functions can
+    use them without re-initialising.
+    """
+    global session, tokenizer, pil_shot
+    global img_name, txt_name, out_name
+
+    # 1. load the model & tokenizer
+    session   = get_model()          # your helper
+    tokenizer = get_tokenizer()      # your helper
+
+    # 2. take an initial screenshot (Pillow’s ImageGrab)
+    pil_shot  = ImageGrab.grab()
+
+    # 3. cache ONNX input/output names
+    img_name  = session.get_inputs()[0].name     # usually "images"
+    txt_name  = session.get_inputs()[1].name     # usually "texts"
+    out_name  = session.get_outputs()[0].name    # usually "similarities"
+
+
 def main():
     """Main entry point"""
     try:
         app = FocusAssistApp()
+        init_clip()
         app.run()
     except Exception as e:
         print(f"Error starting Focus Assist: {e}")

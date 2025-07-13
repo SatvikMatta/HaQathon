@@ -90,10 +90,6 @@ pydantic_yaml==1.4.0
 PyGetWindow==0.0.9
 Pygments==2.18.0
 PyMsgBox==1.0.9
-<<<<<<< Updated upstream
-=======
-
->>>>>>> Stashed changes
 pyparsing==3.1.2
 pyperclip==1.9.0
 PyRect==0.2.0
