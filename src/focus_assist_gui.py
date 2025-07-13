@@ -21,8 +21,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from pomodoro import PomodoroTimer, Task, TaskStatus, TimerState, TerminalOutput
 from pomodoro.constants import (
     DEMO_WORK_SECONDS, DEMO_SHORT_BREAK_SECONDS, DEMO_LONG_BREAK_SECONDS,
-    DEMO_SNAPSHOT_INTERVAL, DEFAULT_WORK_SECONDS, DEFAULT_SHORT_BREAK_SECONDS,
-    DEFAULT_LONG_BREAK_SECONDS, DEFAULT_SNAPSHOT_INTERVAL
+    DEFAULT_WORK_SECONDS, DEFAULT_SHORT_BREAK_SECONDS,
+    DEFAULT_LONG_BREAK_SECONDS
 )
 
 # Modern Color Themes
@@ -1032,15 +1032,13 @@ class FocusAssistApp:
         work_time = DEFAULT_WORK_SECONDS
         short_break = DEFAULT_SHORT_BREAK_SECONDS
         long_break = DEFAULT_LONG_BREAK_SECONDS
-        snapshot_interval = DEFAULT_SNAPSHOT_INTERVAL
             
         # Create timer with a copy of current tasks
         self.timer = PomodoroTimer(
             work_seconds=work_time,
             short_break_seconds=short_break,
             long_break_seconds=long_break,
-            tasks=self.tasks.copy(),  # Use a copy to avoid reference issues
-            snapshot_interval=snapshot_interval
+            tasks=self.tasks.copy()  # Use a copy to avoid reference issues
         )
         
         # Sync timer's current task index with GUI's selection
@@ -1192,9 +1190,7 @@ class FocusAssistApp:
                 # Update terminal display
                 self.terminal_output.update_display(self.timer)
                 
-                # Handle snapshot events
-                if self.timer.should_take_snapshot():
-                    self.terminal_output.handle_snapshot()
+
                 
                 time.sleep(0.1)
                 

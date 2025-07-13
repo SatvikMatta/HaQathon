@@ -230,15 +230,7 @@ class TerminalOutput:
         except Exception as e:
             logger.error(f"Task info print error: {e}")
     
-    def handle_snapshot(self) -> None:
-        """Thread-safe snapshot event handling."""
-        try:
-            logger.debug("Taking snapshot for focus detection...")
-            snapshot_msg = DisplayFormatter.format_snapshot_message(self.debug)
-            if snapshot_msg:
-                print(snapshot_msg)
-        except Exception as e:
-            logger.error(f"Snapshot handling error: {e}")
+
     
     def handle_interruption(self) -> None:
         """Thread-safe interruption handling."""

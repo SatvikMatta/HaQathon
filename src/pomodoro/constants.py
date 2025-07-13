@@ -6,14 +6,12 @@ Constants and configuration values for the Pomodoro timer application.
 DEFAULT_WORK_SECONDS = 25 * 60  # 25 minutes
 DEFAULT_SHORT_BREAK_SECONDS = 5 * 60  # 5 minutes
 DEFAULT_LONG_BREAK_SECONDS = 15 * 60  # 15 minutes
-DEFAULT_SNAPSHOT_INTERVAL = 60  # 1 minute
 DEFAULT_POMOS_BEFORE_LONG_BREAK = 4
 
 # Demo/Test Timer Settings
 DEMO_WORK_SECONDS = 5
 DEMO_SHORT_BREAK_SECONDS = 3
 DEMO_LONG_BREAK_SECONDS = 8
-DEMO_SNAPSHOT_INTERVAL = 5
 
 # System Limits
 MAX_TASKS_EDGE_DEVICE = 20
@@ -22,9 +20,6 @@ MAX_TASK_DESCRIPTION_LENGTH = 500
 MAX_ESTIMATED_POMODOROS = 50
 
 # Threading and Performance
-MAX_FOCUS_DETECTOR_WORKERS = 2
-MAX_FOCUS_DETECTOR_QUEUE_SIZE = 10
-FOCUS_DETECTOR_TIMEOUT_SECONDS = 5.0
 SKIP_DISPLAY_DURATION_SECONDS = 0.5
 
 # Display Settings
@@ -87,5 +82,4 @@ class ErrorMessages:
     TIMER_START_ERROR = "Timer start error"
     TIMER_PAUSE_ERROR = "Timer pause error"
     TIMER_SKIP_ERROR = "Timer skip error"
-    FOCUS_DETECTOR_INIT_ERROR = "Failed to initialize detectors"
-    FOCUS_DETECTOR_START_ERROR = "Failed to start focus detector" 
+ 

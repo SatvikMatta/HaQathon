@@ -1,5 +1,5 @@
 from pomodoro import PomodoroTimer, Task, TerminalOutput
-from pomodoro.constants import DEMO_WORK_SECONDS, DEMO_SHORT_BREAK_SECONDS, DEMO_LONG_BREAK_SECONDS, DEMO_SNAPSHOT_INTERVAL
+from pomodoro.constants import DEMO_WORK_SECONDS, DEMO_SHORT_BREAK_SECONDS, DEMO_LONG_BREAK_SECONDS
 import time
 import logging
 
@@ -35,8 +35,7 @@ def main(debug: bool = False):
         work_seconds=DEMO_WORK_SECONDS,
         short_break_seconds=DEMO_SHORT_BREAK_SECONDS,
         long_break_seconds=DEMO_LONG_BREAK_SECONDS,
-        tasks=demo_tasks,
-        snapshot_interval=DEMO_SNAPSHOT_INTERVAL,
+        tasks=demo_tasks
     )
 
     # Create terminal output handler
@@ -52,9 +51,7 @@ def main(debug: bool = False):
             # Update display
             output.update_display(timer)
             
-            # Handle snapshot events
-            if timer.should_take_snapshot():
-                output.handle_snapshot()
+            
             
             # Small sleep to prevent high CPU usage
             time.sleep(0.1)
@@ -70,5 +67,5 @@ def main(debug: bool = False):
 
 
 if __name__ == "__main__":
-    # Set debug=True to see snapshot logging
+    # Set debug=True to see detailed logging
     main(debug=False) 

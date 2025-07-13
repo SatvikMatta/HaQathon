@@ -86,12 +86,7 @@ class DisplayFormatter:
         """Format interruption message."""
         return f"\n{Fore.RED}Timer stopped by user{Style.RESET_ALL}"
     
-    @staticmethod
-    def format_snapshot_message(debug: bool = False) -> str:
-        """Format snapshot message."""
-        if debug:
-            return f"\n{Fore.YELLOW}Snapshot taken!{Style.RESET_ALL}"
-        return ""
+
     
     @staticmethod
     def format_final_stats_header() -> str:

@@ -7,12 +7,7 @@ A Pomodoro timer with AI-powered focus tracking for Snapdragon X Elite laptops u
 - ✅ Customizable Pomodoro timer with work/break intervals
 - ✅ Task management with progress tracking
 - ✅ Clean terminal interface with progress bars
-- ✅ Thread-safe architecture for AI integration
-- ✅ Edge-optimized focus detection system
-- 🔄 AI-powered focus detection (ready for integration):
-  - Screen content analysis (OCR + image classification)
-  - Webcam pose estimation and distraction detection
-- 🔄 Local processing using Qualcomm AI Hub models
+- ✅ Thread-safe architecture for future AI integration
 
 ## Quick Start
 
@@ -23,8 +18,8 @@ pip install -r requirements.txt
 # Run simple demo
 python src/example.py
 
-# Run AI-powered demo (debug mode)
-python src/example_threaded.py --debug
+# Run GUI version
+python src/focus_assist_gui.py
 ```
 
 ## Usage
@@ -43,13 +38,12 @@ while timer.state != timer.state.IDLE:
     output.update_display(timer)
 ```
 
-### AI-Powered Timer
+### GUI Timer
 ```python
-from pomodoro import EdgeOptimizedFocusDetector, FocusTimerSession
+from src.focus_assist_gui import FocusAssistApp
 
-session = FocusTimerSession(debug=True)
-session.setup_session(work_seconds=10, snapshot_interval=3)  # Debug values
-session.start_session()
+app = FocusAssistApp()
+app.run()
 ```
 
 ## License

@@ -46,13 +46,12 @@ class TimerConfig:
     work_seconds: int
     short_break_seconds: int
     long_break_seconds: int
-    snapshot_interval: int
     pomos_before_long_break: int
 
     def __post_init__(self):
         # Validate configuration
         if any(x <= 0 for x in [self.work_seconds, self.short_break_seconds, 
-                               self.long_break_seconds, self.snapshot_interval]):
+                               self.long_break_seconds]):
             raise ValueError(ErrorMessages.INVALID_TIME_INTERVALS)
         if self.pomos_before_long_break <= 0:
             raise ValueError(ErrorMessages.INVALID_LONG_BREAK_COUNT)
@@ -62,8 +61,8 @@ class PomodoroTimer:
     """Thread-safe Pomodoro timer optimized for edge deployment."""
     
     __slots__ = ('_config', '_tasks', '_current_task_idx', '_completed_pomos', 
-                 '_state', '_start_time', '_end_time', '_next_snapshot_time', 
-                 '_lock', '_snapshot_callbacks', '_state_callbacks', '_pre_pause_state', '_paused_remaining',
+                 '_state', '_start_time', '_end_time', 
+                 '_lock', '_state_callbacks', '_pre_pause_state', '_paused_remaining',
                  '_pre_skip_state', '_skipped_remaining', '_skip_display_shown')
 
     def __init__(
@@ -72,7 +71,6 @@ class PomodoroTimer:
         short_break_seconds: int,
         long_break_seconds: int,
         tasks: List[Task],
-        snapshot_interval: int = 60,
         pomos_before_long_break: int = 4
     ):
         # Validate inputs
@@ -85,7 +83,6 @@ class PomodoroTimer:
             work_seconds=work_seconds,
             short_break_seconds=short_break_seconds,
             long_break_seconds=long_break_seconds,
-            snapshot_interval=snapshot_interval,
             pomos_before_long_break=pomos_before_long_break
         )
         
@@ -97,15 +94,13 @@ class PomodoroTimer:
         self._state = TimerState.IDLE
         self._start_time: Optional[float] = None  # Use timestamp for performance
         self._end_time: Optional[float] = None
-        self._next_snapshot_time: Optional[float] = None
         self._pre_pause_state: Optional[TimerState] = None
         self._paused_remaining: Optional[float] = None
         self._pre_skip_state: Optional[TimerState] = None
         self._skipped_remaining: Optional[float] = None
         self._skip_display_shown: bool = False
         
-        # Callback systems for AI processing
-        self._snapshot_callbacks: List[Callable[[], None]] = []
+        # Callback systems
         self._state_callbacks: List[Callable[[TimerState], None]] = []
 
     @property
@@ -132,10 +127,7 @@ class PomodoroTimer:
         with self._lock:
             return self._tasks.copy()
 
-    def add_snapshot_callback(self, callback: Callable[[], None]) -> None:
-        """Add callback for snapshot events (AI processing)."""
-        with self._lock:
-            self._snapshot_callbacks.append(callback)
+
 
     def add_state_callback(self, callback: Callable[[TimerState], None]) -> None:
         """Add callback for state changes."""
@@ -173,7 +165,6 @@ class PomodoroTimer:
                     self._state = TimerState.WORK
                     self._start_time = now
                     self._end_time = now + self._config.work_seconds
-                    self._next_snapshot_time = now + self._config.snapshot_interval
                     
                     # Update task status to IN_PROGRESS
                     current_task = self._tasks[self._current_task_idx]
@@ -278,33 +269,7 @@ class PomodoroTimer:
             print(f"Timer remaining time error: {e}")
             return None
 
-    def should_take_snapshot(self) -> bool:
-        """Check if it's time to take a snapshot. Thread-safe."""
-        try:
-            with self._lock:
-                if (not self._next_snapshot_time or 
-                    self._state != TimerState.WORK or 
-                    not self._snapshot_callbacks):
-                    return False
-                
-                now = time.time()
-                if now >= self._next_snapshot_time:
-                    self._next_snapshot_time = now + self._config.snapshot_interval
-                    # Trigger callbacks asynchronously for performance
-                    threading.Thread(target=self._trigger_snapshot_callbacks, daemon=True).start()
-                    return True
-                return False
-        except Exception as e:
-            print(f"Snapshot check error: {e}")
-            return False
 
-    def _trigger_snapshot_callbacks(self) -> None:
-        """Trigger snapshot callbacks in background thread."""
-        for callback in self._snapshot_callbacks:
-            try:
-                callback()
-            except Exception as e:
-                print(f"Snapshot callback error: {e}")
 
     def _notify_state_change(self, new_state: TimerState) -> None:
         """Notify state change callbacks."""
@@ -372,8 +337,6 @@ class PomodoroTimer:
             now = time.time()
             self._start_time = now
             self._end_time = now + self._get_current_interval_length()
-            if self._state == TimerState.WORK:
-                self._next_snapshot_time = now + self._config.snapshot_interval
             
             self._notify_state_change(self._state)
             return True
