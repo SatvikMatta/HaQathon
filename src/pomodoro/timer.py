@@ -64,7 +64,8 @@ class PomodoroTimer:
                  '_state', '_start_time', '_end_time', 
                  '_lock', '_state_callbacks', '_pre_pause_state', '_paused_remaining',
                  '_pre_skip_state', '_skipped_remaining', '_skip_display_shown', '_target_state',
-                 '_start_new_state_paused')
+                 '_start_new_state_paused', '_ai_checkin_interval', '_last_ai_snapshot', 
+                 '_ai_snapshot_callbacks')
 
     def __init__(
         self,
@@ -72,7 +73,8 @@ class PomodoroTimer:
         short_break_seconds: int,
         long_break_seconds: int,
         tasks: List[Task],
-        pomos_before_long_break: int = 4
+        pomos_before_long_break: int = 4,
+        ai_checkin_interval_seconds: int = 30
     ):
         # Validate inputs
         ValidationUtils.validate_task_list(tasks)
@@ -105,6 +107,11 @@ class PomodoroTimer:
         
         # Callback systems
         self._state_callbacks: List[Callable[[TimerState], None]] = []
+        
+        # AI monitoring system  
+        self._ai_checkin_interval = ai_checkin_interval_seconds  # Use provided interval (GUI enforces 30s minimum)
+        self._last_ai_snapshot: int = 0  # Track number of snapshots taken in current interval
+        self._ai_snapshot_callbacks: List[Callable[[], None]] = []
 
     @property
     def state(self) -> TimerState:
@@ -136,6 +143,51 @@ class PomodoroTimer:
         """Add callback for state changes."""
         with self._lock:
             self._state_callbacks.append(callback)
+    
+    def add_ai_snapshot_callback(self, callback: Callable[[], None]) -> None:
+        """Add callback for AI snapshot intervals."""
+        with self._lock:
+            self._ai_snapshot_callbacks.append(callback)
+    
+    def _trigger_ai_snapshot(self) -> None:
+        """Trigger AI snapshot and notify all callbacks."""
+        # Call all registered AI snapshot callbacks
+        for callback in self._ai_snapshot_callbacks:
+            try:
+                callback()
+            except Exception as e:
+                print(f"AI snapshot callback error: {e}")
+    
+    def _check_ai_snapshot_trigger(self) -> None:
+        """Check if it's time to trigger an AI snapshot synchronized with display clock."""
+        if not self._ai_snapshot_callbacks:
+            return  # No callbacks registered, skip
+            
+        # Only trigger during active work states (not breaks, paused, etc.)
+        if self._state not in [TimerState.WORK]:
+            return  # Skip during breaks/paused
+            
+        if self._start_time is None or self._end_time is None:
+            return  # No timing info available
+            
+        current_time = time.time()
+        
+        # Calculate elapsed time in current interval (synchronized with display clock)
+        interval_length = self._get_current_interval_length()
+        elapsed_time = interval_length - (self._end_time - current_time)
+        
+        # Calculate how many AI snapshots should have occurred by now
+        snapshots_due = int(elapsed_time // self._ai_checkin_interval)
+        
+        # Initialize tracking on first run
+        if self._last_ai_snapshot is None:
+            self._last_ai_snapshot = 0  # Track number of snapshots taken
+        
+        # Check if we need to trigger more snapshots
+        if snapshots_due > self._last_ai_snapshot:
+            # Update count BEFORE triggering to prevent recursive loops
+            self._last_ai_snapshot = snapshots_due
+            self._trigger_ai_snapshot()
 
     def start(self) -> bool:
         """Start or resume the timer. Returns success status."""
@@ -156,6 +208,8 @@ class PomodoroTimer:
                     self._paused_remaining = None
                     self._pre_pause_state = None
                     
+                    # AI snapshot timing continues from where it left off (no reset needed)
+                    
                     # Ensure task status is IN_PROGRESS when resuming work
                     if self._state == TimerState.WORK and self._current_task_idx < len(self._tasks):
                         current_task = self._tasks[self._current_task_idx]
@@ -168,6 +222,9 @@ class PomodoroTimer:
                     self._state = TimerState.WORK
                     self._start_time = now
                     self._end_time = now + self._config.work_seconds
+                    
+                    # Reset AI snapshot count for new work session
+                    self._last_ai_snapshot = 0
                     
                     # Update task status to IN_PROGRESS
                     current_task = self._tasks[self._current_task_idx]
@@ -331,6 +388,9 @@ class PomodoroTimer:
                     self._handle_interval_completion()
                     return self.get_remaining_time()
                 
+                # Check for AI snapshot trigger during active timer operation
+                self._check_ai_snapshot_trigger()
+                
                 return timedelta(seconds=max(0, self._end_time - now))
         except Exception as e:
             print(f"Timer remaining time error: {e}")
@@ -432,6 +492,10 @@ class PomodoroTimer:
             now = time.time()
             self._start_time = now
             self._end_time = now + self._get_current_interval_length()
+            
+            # Reset AI snapshot count for new work intervals
+            if self._state == TimerState.WORK:
+                self._last_ai_snapshot = 0
             
             # If we were paused when we started the skip, immediately pause the new state
             if self._start_new_state_paused:

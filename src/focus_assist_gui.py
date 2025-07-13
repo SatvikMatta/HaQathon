@@ -1875,12 +1875,13 @@ class FocusAssistApp:
         short_break = self.settings['timer']['short_break_minutes'] * 60
         long_break = self.settings['timer']['long_break_minutes'] * 60
             
-        # Create timer with a copy of current tasks
+        # Create timer with a copy of current tasks and AI settings
         self.timer = PomodoroTimer(
             work_seconds=work_time,
             short_break_seconds=short_break,
             long_break_seconds=long_break,
-            tasks=self.tasks.copy()  # Use a copy to avoid reference issues
+            tasks=self.tasks.copy(),  # Use a copy to avoid reference issues
+            ai_checkin_interval_seconds=self.settings['ai']['checkin_interval_seconds']
         )
         
         # Sync timer's current task index with GUI's selection
@@ -1892,6 +1893,7 @@ class FocusAssistApp:
         
         # Add callbacks
         self.timer.add_state_callback(self.on_timer_state_changed)
+        self.timer.add_ai_snapshot_callback(self.on_ai_snapshot_triggered)
         
         # Sync initial state from timer
         self.sync_tasks_from_timer()
@@ -2144,6 +2146,25 @@ class FocusAssistApp:
             # Update button text when resumed/started
             if hasattr(self, 'start_pause_btn') and self.is_timer_running:
                 self.start_pause_btn.configure(text="PAUSE")
+    
+    def on_ai_snapshot_triggered(self):
+        """Handle AI snapshot intervals - placeholder for future AI integration"""
+        # TODO: Implement AI monitoring functionality here
+        # This function will be called every AI check-in interval (from settings)
+        # You can add screenshot capture, focus detection, etc. here
+        
+        if hasattr(self, 'settings'):
+            interval = self.settings['ai']['checkin_interval_seconds']
+            accountability_mode = self.settings['accountability']['mode']
+            print(f"🤖 AI Snapshot triggered (interval: {interval}s, mode: {accountability_mode})")
+            
+            # Placeholder for future AI functionality:
+            # - Take screenshot
+            # - Analyze focus level
+            # - Send to AI for analysis
+            # - Apply accountability measures based on mode
+        else:
+            print("🤖 AI Snapshot triggered")
                 
     def on_work_session_completed(self):
         """Handle completion of a work session (pomodoro) - sync from timer"""
