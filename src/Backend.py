@@ -149,6 +149,7 @@ Respond in this exact JSON format:
         if response.status_code == 200:
             result = response.json()
             text = result.get("textResponse", "")
+            print(text)
             # Check if the text is a valid JSON
             try:
                 json.loads(text)
