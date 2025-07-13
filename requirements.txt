@@ -16,6 +16,7 @@ certifi==2024.2.2
 charset-normalizer==2.0.4
 colorama==0.4.6
 coloredlogs==15.0.1
+customtkinter==5.2.2
 comm==0.2.2
 contextlib2==21.6.0
 contourpy==1.2.1
@@ -92,9 +93,6 @@ pydantic_yaml==1.4.0
 PyGetWindow==0.0.9
 Pygments==2.18.0
 PyMsgBox==1.0.9
-pyobjc-core==11.1
-pyobjc-framework-Cocoa==11.1
-pyobjc-framework-Quartz==11.1
 pyparsing==3.1.2
 pyperclip==1.9.0
 PyRect==0.2.0
