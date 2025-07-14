@@ -380,7 +380,7 @@ class FocusAssistApp:
         self.apply_theme()
         
         # Load sample tasks for demo
-        self.load_sample_tasks()
+        # self.load_sample_tasks()
         
         # Initialize timer state
         self.current_timer_state = None
@@ -1319,7 +1319,7 @@ class FocusAssistApp:
         self.work_minutes_slider = ctk.CTkSlider(
             work_frame,
             from_=2,
-            to=60,
+            to=50,
             number_of_steps=45,
             width=200,
             command=self.update_work_minutes_label
