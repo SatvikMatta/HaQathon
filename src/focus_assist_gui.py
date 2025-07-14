@@ -22,6 +22,12 @@ import Backend
 from Backend import get_json_screenshot, screenshot
 from pomodoro.stats_helper import get_stats
 
+# Add matplotlib imports for stats visualization
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.figure import Figure
+import numpy as np
+
 # from ClipApp import ClipApp
 from ClipAppOnnx import *
 
@@ -562,6 +568,8 @@ class FocusAssistApp:
             self.timer_content.grid(row=0, column=0, sticky='nsew', padx=20, pady=10)
         elif tab_name == "Stats":
             self.stats_content.grid(row=0, column=0, sticky='nsew', padx=20, pady=10)
+            # Refresh stats when switching to stats tab
+            self.refresh_stats_display()
         elif tab_name == "Settings":
             self.settings_content.grid(row=0, column=0, sticky='nsew', padx=20, pady=10)
             # Refresh settings values when switching to settings tab
@@ -642,25 +650,468 @@ class FocusAssistApp:
         self.stats_content.grid_columnconfigure(0, weight=1)
         self.stats_content.grid_rowconfigure(0, weight=1)
         
-        # Placeholder content for stats tab
-        stats_frame = ctk.CTkFrame(
+        # Main stats container
+        self.stats_main_frame = ctk.CTkFrame(
             self.stats_content,
             fg_color=self.current_theme['bg_secondary'],
             corner_radius=16,
             border_width=1,
             border_color=self.current_theme['border']
         )
-        stats_frame.grid(row=0, column=0, sticky='nsew')
+        self.stats_main_frame.grid(row=0, column=0, sticky='nsew', padx=20, pady=20)
+        self.stats_main_frame.grid_columnconfigure(0, weight=1)
+        self.stats_main_frame.grid_rowconfigure(1, weight=1)
         
-        # Coming soon message
-        coming_soon_label = ctk.CTkLabel(
-            stats_frame,
-            text="📊 Focus Analytics & Timeline\n\nComing Soon!\n\nThis tab will show:\n• Focus session history\n• Productivity metrics\n• Distraction patterns\n• Daily/weekly statistics",
+        # Stats header
+        self.stats_header = ctk.CTkFrame(self.stats_main_frame, fg_color='transparent')
+        self.stats_header.grid(row=0, column=0, sticky='ew', padx=20, pady=(20, 0))
+        
+        stats_title = ctk.CTkLabel(
+            self.stats_header,
+            text="📊 Focus Analytics & Timeline",
+            font=ctk.CTkFont(size=24, weight='bold'),
+            text_color=self.current_theme['text_primary']
+        )
+        stats_title.pack(side='left')
+        
+        # Refresh button
+        self.refresh_stats_btn = ctk.CTkButton(
+            self.stats_header,
+            text="🔄 Refresh",
+            width=100,
+            height=30,
+            font=ctk.CTkFont(size=12, weight='bold'),
+            fg_color=self.current_theme['primary'],
+            hover_color=self.current_theme['primary_hover'],
+            command=self.refresh_stats_display
+        )
+        self.refresh_stats_btn.pack(side='right')
+        
+        # Scrollable stats content
+        self.stats_scroll_frame = ctk.CTkScrollableFrame(
+            self.stats_main_frame,
+            fg_color='transparent',
+            corner_radius=0
+        )
+        self.stats_scroll_frame.grid(row=1, column=0, sticky='nsew', padx=20, pady=20)
+        self.stats_scroll_frame.grid_columnconfigure(0, weight=1)
+        
+        # Initialize with empty state
+        self.create_empty_stats_state()
+        
+    def create_empty_stats_state(self):
+        """Create empty state display for stats"""
+        # Clear existing content
+        for widget in self.stats_scroll_frame.winfo_children():
+            widget.destroy()
+        
+        # Empty state
+        empty_frame = ctk.CTkFrame(self.stats_scroll_frame, fg_color='transparent')
+        empty_frame.pack(fill='both', expand=True, pady=50)
+        
+        empty_icon = ctk.CTkLabel(
+            empty_frame,
+            text="📊",
+            font=ctk.CTkFont(size=48)
+        )
+        empty_icon.pack()
+        
+        empty_text = ctk.CTkLabel(
+            empty_frame,
+            text="No focus session data yet\nStart a timer session to see analytics!",
             font=ctk.CTkFont(size=16),
-            text_color=self.current_theme['text_primary'],
+            text_color=self.current_theme['text_muted'],
             justify='center'
         )
-        coming_soon_label.pack(expand=True, pady=50)
+        empty_text.pack(pady=(10, 0))
+        
+    def refresh_stats_display(self):
+        """Refresh the stats display with current data"""
+        # Get events from logger
+        events = self.event_logger.get_events_as_dicts()
+        
+        if not events or self.event_logger.get_event_count() == 0:
+            self.create_empty_stats_state()
+            return
+            
+        # Get stats from helper
+        stats = get_stats(events)
+        
+        if not stats:
+            self.create_empty_stats_state()
+            return
+            
+        # Create timeline visualization
+        self.create_timeline_visualization(events, stats)
+        
+    def create_timeline_visualization(self, events, stats):
+        """Create comprehensive timeline visualization"""
+        # Clear existing content
+        for widget in self.stats_scroll_frame.winfo_children():
+            widget.destroy()
+        
+        # Create main visualization frame
+        viz_frame = ctk.CTkFrame(self.stats_scroll_frame, fg_color='transparent')
+        viz_frame.pack(fill='both', expand=True, pady=10)
+        viz_frame.grid_columnconfigure(0, weight=1)
+        
+        # Session overview
+        self.create_session_overview(viz_frame, events, stats)
+        
+        # Timeline chart
+        self.create_timeline_chart(viz_frame, events, stats)
+        
+        # Detailed stats
+        self.create_detailed_stats(viz_frame, events, stats)
+        
+    def create_session_overview(self, parent, events, stats):
+        """Create session overview section"""
+        overview_frame = ctk.CTkFrame(
+            parent,
+            fg_color=self.current_theme['card_bg'],
+            corner_radius=12,
+            border_width=1,
+            border_color=self.current_theme['border']
+        )
+        overview_frame.pack(fill='x', pady=(0, 20))
+        
+        # Overview title
+        overview_title = ctk.CTkLabel(
+            overview_frame,
+            text="📈 Session Overview",
+            font=ctk.CTkFont(size=18, weight='bold'),
+            text_color=self.current_theme['text_primary']
+        )
+        overview_title.pack(pady=(15, 10))
+        
+        # Stats grid
+        stats_grid = ctk.CTkFrame(overview_frame, fg_color='transparent')
+        stats_grid.pack(fill='x', padx=20, pady=(0, 15))
+        
+        # Calculate overview stats
+        total_pomodoros = len(stats)
+        total_ai_snaps = len([e for e in events if e.get('event_type') == 'AI_SNAP'])
+        avg_productivity = sum(s.get('percent_productive', 0) for s in stats) / len(stats) if stats else 0
+        session_duration = self.event_logger.get_session_duration()
+        
+        # Display stats in grid
+        overview_stats = [
+            ("🍅 Pomodoros", str(total_pomodoros)),
+            ("🤖 AI Snapshots", str(total_ai_snaps)),
+            ("📊 Avg Productivity", f"{avg_productivity:.1f}%"),
+            ("⏱️ Session Duration", self.format_duration(session_duration))
+        ]
+        
+        for i, (label, value) in enumerate(overview_stats):
+            col = i % 2
+            row = i // 2
+            
+            stat_frame = ctk.CTkFrame(stats_grid, fg_color='transparent')
+            stat_frame.grid(row=row, column=col, sticky='ew', padx=10, pady=5)
+            stats_grid.grid_columnconfigure(col, weight=1)
+            
+            stat_label = ctk.CTkLabel(
+                stat_frame,
+                text=label,
+                font=ctk.CTkFont(size=14),
+                text_color=self.current_theme['text_secondary']
+            )
+            stat_label.pack()
+            
+            stat_value = ctk.CTkLabel(
+                stat_frame,
+                text=value,
+                font=ctk.CTkFont(size=18, weight='bold'),
+                text_color=self.current_theme['primary']
+            )
+            stat_value.pack()
+            
+    def create_timeline_chart(self, parent, events, stats):
+        """Create timeline chart with matplotlib"""
+        chart_frame = ctk.CTkFrame(
+            parent,
+            fg_color=self.current_theme['card_bg'],
+            corner_radius=12,
+            border_width=1,
+            border_color=self.current_theme['border']
+        )
+        chart_frame.pack(fill='both', expand=True, pady=(0, 20))
+        
+        # Chart title
+        chart_title = ctk.CTkLabel(
+            chart_frame,
+            text="📊 Focus Timeline",
+            font=ctk.CTkFont(size=18, weight='bold'),
+            text_color=self.current_theme['text_primary']
+        )
+        chart_title.pack(pady=(15, 10))
+        
+        # Create matplotlib figure
+        fig = Figure(figsize=(12, 6), dpi=100)
+        fig.patch.set_facecolor(self.current_theme['card_bg'])
+        ax = fig.add_subplot(111)
+        
+        # Set background color
+        ax.set_facecolor(self.current_theme['card_bg'])
+        
+        # Build timeline data
+        timeline_data = self.build_timeline_data(events, stats)
+        
+        if timeline_data:
+            # Plot work periods
+            work_periods = timeline_data['work_periods']
+            break_periods = timeline_data['break_periods']
+            
+            # Colors for different elements
+            work_color = '#FF6B6B' if not self.is_dark_mode else '#FF8A8A'
+            break_color = '#4ECDC4' if not self.is_dark_mode else '#6EDDD6'
+            productive_color = '#2ECC71' if not self.is_dark_mode else '#58D68D'
+            unproductive_color = '#E74C3C' if not self.is_dark_mode else '#EC7063'
+            
+            # Plot work periods
+            for period in work_periods:
+                start_time = period['start_minutes']
+                duration = period['duration_minutes']
+                productivity = period['productivity']
+                
+                # Choose color based on productivity
+                if productivity >= 75:
+                    color = productive_color
+                elif productivity >= 50:
+                    color = work_color
+                else:
+                    color = unproductive_color
+                
+                ax.barh(0, duration, left=start_time, height=0.8, 
+                       color=color, alpha=0.7, label=f"Work ({productivity:.0f}% productive)")
+                
+                # Add productivity text
+                ax.text(start_time + duration/2, 0, f"{productivity:.0f}%", 
+                       ha='center', va='center', fontweight='bold', 
+                       color='white' if self.is_dark_mode else 'black')
+            
+            # Plot break periods
+            for period in break_periods:
+                start_time = period['start_minutes']
+                duration = period['duration_minutes']
+                break_type = period['type']
+                
+                ax.barh(0, duration, left=start_time, height=0.4, 
+                       color=break_color, alpha=0.5, 
+                       label=f"{break_type} Break" if break_type == 'Long' else "Short Break")
+                
+                # Add break text
+                ax.text(start_time + duration/2, 0, f"{break_type[0]}B", 
+                       ha='center', va='center', fontsize=10,
+                       color=self.current_theme['text_primary'])
+            
+            # Customize chart
+            ax.set_xlim(0, timeline_data['total_duration_minutes'])
+            ax.set_ylim(-0.5, 0.5)
+            ax.set_xlabel('Time (minutes)', color=self.current_theme['text_primary'])
+            ax.set_title('Focus Session Timeline', color=self.current_theme['text_primary'])
+            ax.set_yticks([])
+            
+            # Format x-axis to show time
+            x_ticks = ax.get_xticks()
+            ax.set_xticklabels([f"{int(t//60):02d}:{int(t%60):02d}" for t in x_ticks])
+            ax.tick_params(colors=self.current_theme['text_primary'])
+            
+            # Remove duplicate legend entries
+            handles, labels = ax.get_legend_handles_labels()
+            by_label = dict(zip(labels, handles))
+            ax.legend(list(by_label.values()), list(by_label.keys()), 
+                     loc='upper right', facecolor=self.current_theme['card_bg'])
+            
+        else:
+            # Empty chart
+            ax.text(0.5, 0.5, 'No timeline data available', 
+                   ha='center', va='center', transform=ax.transAxes,
+                   color=self.current_theme['text_muted'], fontsize=16)
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 1)
+            ax.set_xticks([])
+            ax.set_yticks([])
+        
+        # Embed chart in tkinter
+        canvas = FigureCanvasTkAgg(fig, chart_frame)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill='both', expand=True, padx=20, pady=(0, 20))
+        
+    def create_detailed_stats(self, parent, events, stats):
+        """Create detailed statistics section"""
+        detailed_frame = ctk.CTkFrame(
+            parent,
+            fg_color=self.current_theme['card_bg'],
+            corner_radius=12,
+            border_width=1,
+            border_color=self.current_theme['border']
+        )
+        detailed_frame.pack(fill='x', pady=(0, 20))
+        
+        # Detailed title
+        detailed_title = ctk.CTkLabel(
+            detailed_frame,
+            text="📋 Detailed Pomodoro Stats",
+            font=ctk.CTkFont(size=18, weight='bold'),
+            text_color=self.current_theme['text_primary']
+        )
+        detailed_title.pack(pady=(15, 10))
+        
+        # Stats table
+        if stats:
+            table_frame = ctk.CTkFrame(detailed_frame, fg_color='transparent')
+            table_frame.pack(fill='x', padx=20, pady=(0, 15))
+            
+            # Table headers
+            headers = ["Pomodoro", "Category", "Focus Level", "Productivity"]
+            for col, header in enumerate(headers):
+                header_label = ctk.CTkLabel(
+                    table_frame,
+                    text=header,
+                    font=ctk.CTkFont(size=14, weight='bold'),
+                    text_color=self.current_theme['text_secondary']
+                )
+                header_label.grid(row=0, column=col, padx=10, pady=5, sticky='w')
+                table_frame.grid_columnconfigure(col, weight=1)
+            
+            # Table data
+            for i, stat in enumerate(stats):
+                row = i + 1
+                
+                # Pomodoro number
+                pom_label = ctk.CTkLabel(
+                    table_frame,
+                    text=f"#{row}",
+                    font=ctk.CTkFont(size=12),
+                    text_color=self.current_theme['text_primary']
+                )
+                pom_label.grid(row=row, column=0, padx=10, pady=2, sticky='w')
+                
+                # Category
+                category = stat.get('most_common_category', 'Unknown')
+                cat_label = ctk.CTkLabel(
+                    table_frame,
+                    text=category,
+                    font=ctk.CTkFont(size=12),
+                    text_color=self.current_theme['text_primary']
+                )
+                cat_label.grid(row=row, column=1, padx=10, pady=2, sticky='w')
+                
+                # Focus level
+                focus = stat.get('avg_focus_level', 'Unknown')
+                focus_color = {
+                    'high': self.current_theme['success'],
+                    'medium': self.current_theme['warning'],
+                    'low': self.current_theme['error']
+                }.get(focus, self.current_theme['text_primary'])
+                
+                focus_label = ctk.CTkLabel(
+                    table_frame,
+                    text=focus.capitalize(),
+                    font=ctk.CTkFont(size=12, weight='bold'),
+                    text_color=focus_color
+                )
+                focus_label.grid(row=row, column=2, padx=10, pady=2, sticky='w')
+                
+                # Productivity
+                productivity = stat.get('percent_productive', 0)
+                prod_color = self.current_theme['success'] if productivity >= 75 else \
+                           self.current_theme['warning'] if productivity >= 50 else \
+                           self.current_theme['error']
+                
+                prod_label = ctk.CTkLabel(
+                    table_frame,
+                    text=f"{productivity:.1f}%",
+                    font=ctk.CTkFont(size=12, weight='bold'),
+                    text_color=prod_color
+                )
+                prod_label.grid(row=row, column=3, padx=10, pady=2, sticky='w')
+        else:
+            # No data message
+            no_data_label = ctk.CTkLabel(
+                detailed_frame,
+                text="No detailed stats available yet",
+                font=ctk.CTkFont(size=14),
+                text_color=self.current_theme['text_muted']
+            )
+            no_data_label.pack(pady=20)
+            
+    def build_timeline_data(self, events, stats):
+        """Build timeline data from events and stats"""
+        if not events:
+            return None
+            
+        # Get timer settings
+        work_minutes = self.settings['timer']['work_minutes']
+        short_break_minutes = self.settings['timer']['short_break_minutes']
+        long_break_minutes = self.settings['timer']['long_break_minutes']
+        
+        timeline_data = {
+            'work_periods': [],
+            'break_periods': [],
+            'total_duration_minutes': 0
+        }
+        
+        current_time = 0
+        current_pomodoro = 0
+        
+        for event in events:
+            event_type = event.get('event_type')
+            
+            if event_type == 'TIMER_START':
+                current_time = 0
+                
+            elif event_type == 'POM_START':
+                # Start of work period
+                current_pomodoro += 1
+                
+            elif event_type == 'POM_END':
+                # End of work period
+                if current_pomodoro <= len(stats):
+                    stat = stats[current_pomodoro - 1]
+                    productivity = stat.get('percent_productive', 0)
+                    
+                    timeline_data['work_periods'].append({
+                        'start_minutes': current_time,
+                        'duration_minutes': work_minutes,
+                        'productivity': productivity,
+                        'pomodoro_number': current_pomodoro
+                    })
+                
+                current_time += work_minutes
+                
+            elif event_type == 'BREAK_START':
+                # Start of short break
+                timeline_data['break_periods'].append({
+                    'start_minutes': current_time,
+                    'duration_minutes': short_break_minutes,
+                    'type': 'Short'
+                })
+                current_time += short_break_minutes
+                
+            elif event_type == 'LONG_BREAK_START':
+                # Start of long break
+                timeline_data['break_periods'].append({
+                    'start_minutes': current_time,
+                    'duration_minutes': long_break_minutes,
+                    'type': 'Long'
+                })
+                current_time += long_break_minutes
+        
+        timeline_data['total_duration_minutes'] = current_time
+        return timeline_data
+        
+    def format_duration(self, seconds):
+        """Format duration in seconds to readable format"""
+        if seconds < 60:
+            return f"{int(seconds)}s"
+        elif seconds < 3600:
+            return f"{int(seconds//60)}m {int(seconds%60)}s"
+        else:
+            hours = int(seconds // 3600)
+            minutes = int((seconds % 3600) // 60)
+            return f"{hours}h {minutes}m"
         
     def create_settings_content(self):
         """Create content for the Settings tab"""
@@ -768,7 +1219,7 @@ class FocusAssistApp:
         
         self.work_minutes_slider = ctk.CTkSlider(
             work_frame,
-            from_=15,
+            from_=2,
             to=60,
             number_of_steps=45,
             width=200,
@@ -800,7 +1251,7 @@ class FocusAssistApp:
         
         self.short_break_slider = ctk.CTkSlider(
             short_break_frame,
-            from_=3,
+            from_=1,
             to=15,
             number_of_steps=12,
             width=200,
@@ -832,7 +1283,7 @@ class FocusAssistApp:
         
         self.long_break_slider = ctk.CTkSlider(
             long_break_frame,
-            from_=10,
+            from_=2,
             to=30,
             number_of_steps=20,
             width=200,
@@ -2578,6 +3029,10 @@ class FocusAssistApp:
             # Update UI to reflect changes
             self.schedule_update('current_task')
             self.schedule_update('tasks')
+            
+            # Refresh stats if currently viewing stats tab
+            if hasattr(self, 'current_tab') and self.current_tab == "Stats":
+                self.refresh_stats_display()
             
             # Update status with current progress
             if 0 <= self.current_task_index < len(self.tasks):

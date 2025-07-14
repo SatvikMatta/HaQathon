@@ -2,7 +2,7 @@
 
 ## 🎯 Project Overview
 
-**Focus Assist** is a modern Pomodoro timer application designed for the **Qualcomm Snapdragon X Elite hackathon** with local AI-powered focus detection capabilities. The project currently has a fully functional Pomodoro timer foundation with plans to integrate AI focus monitoring features.
+**Focus Assist** is a modern Pomodoro timer application designed for the **Qualcomm Snapdragon X Elite hackathon** with local AI-powered focus detection capabilities. The project currently has a fully functional Pomodoro timer foundation with a streamlined event logging system ready for AI integration.
 
 ### 🏆 Hackathon Vision
 The core concept is an AI-enhanced productivity timer that helps users maintain focus by:
@@ -11,14 +11,17 @@ The core concept is an AI-enhanced productivity timer that helps users maintain 
 3. **Focus Analytics**: Providing detailed stats and logging to show when users got distracted and what they were doing
 4. **Local AI Only**: All AI models run locally on Snapdragon X Elite NPU - no internet APIs allowed
 
-### Current State (Phase 1 Complete)
+### Current State (Phase 1 Complete + Event System Optimization)
 - ✅ **Fully functional** Pomodoro timer with GUI
 - ✅ **Task management system** with CRUD operations
 - ✅ **Modern UI** with dark/light themes and responsive design
 - ✅ **Radio button mode switching** - click Work/Break buttons to instantly switch timer states
 - ✅ **Thread-safe architecture** with proper state management
 - ✅ **Visual feedback system** with color-coded states and smooth transitions
-- ✅ **Terminal output integration** for cross-reference
+- ✅ **Streamlined event logging** with real-time event tracking
+- ✅ **Clean dependency management** - removed complex terminal dependencies
+- ✅ **String-based event types** for better stats integration
+- ✅ **Real-time event printing** with simple "event added" + full list display
 - 🔄 **AI focus detection** - ready for integration (Phase 2)
 
 ### 🎯 Next Goals (Phase 2)
@@ -33,15 +36,16 @@ The core concept is an AI-enhanced productivity timer that helps users maintain 
 ```
 HaQathon/
 ├── src/
-│   ├── focus_assist_gui.py          # 🔥 MAIN GUI APPLICATION (1,707 lines)
+│   ├── focus_assist_gui.py          # 🔥 MAIN GUI APPLICATION (3,244 lines)
+│   ├── eventlogging.py              # 🔥 EVENT LOGGING SYSTEM (203 lines)
 │   ├── example.py                   # Simple terminal-based demo
-│   └── pomodoro/                    # Core timer backend
+│   └── pomodoro/
 │       ├── __init__.py              # Module exports
 │       ├── timer.py                 # 🔥 PomodoroTimer class (384 lines)
-│       ├── terminal_output.py       # Terminal display system
-│       ├── display.py               # Display formatting utilities
+│       ├── terminal_output.py       # 🔥 SIMPLIFIED Terminal output (125 lines)
 │       ├── constants.py             # Configuration constants
-│       └── utils.py                 # Utility functions
+│       ├── utils.py                 # Utility functions
+│       └── stats_helper.py          # 🔥 STATS PROCESSING (65 lines)
 ├── requirements.txt                 # Python dependencies
 ├── README.md                        # User documentation
 └── AI_README.md                     # This file
@@ -123,6 +127,99 @@ class Task(BaseModel):           # Pydantic model for validation
 └─────────────────────┴───────────────────────────────────────────┘
 ```
 
+## 🔥 Event Logging System (Recently Optimized)
+
+### Current Implementation
+The event logging system has been streamlined for maximum simplicity and real-time feedback:
+
+```python
+# Event logging with real-time output
+def _log_event(self, event_type: str, **kwargs) -> None:
+    """Log an event with relative timestamp"""
+    relative_time = self._get_relative_time()
+    event = SessionEvent(
+        event_type=event_type,
+        relative_time=relative_time,
+        data=kwargs
+    )
+    
+    with self._lock:
+        self._events.append(event)
+        
+        # Print "event added" and entire event list
+        print("event added")
+        print("Current event logger list:")
+        for i, evt in enumerate(self._events, 1):
+            print(f"  {i}. event_type: {evt.event_type}")
+            for key, value in evt.data.items():
+                print(f"     {key}: {value}")
+        print()  # Empty line for readability
+```
+
+### Event Types (String-Based)
+- **TIMER_START**: `pomodoro_length`, `break_length`, `long_break_length`
+- **POM_START**: `task_title`, `curr_pomodoro`
+- **AI_SNAP**: `s_category`, `s_focus`, `s_is_productive`
+- **POM_END**: (no additional fields)
+- **BREAK_START**: (no additional fields)
+- **BREAK_END**: (no additional fields)
+- **LONG_BREAK_START**: (no additional fields)
+- **LONG_BREAK_END**: (no additional fields)
+
+### Real-Time Output Example
+```
+event added
+Current event logger list:
+  1. event_type: TIMER_START
+     pomodoro_length: 1500
+     break_length: 300
+     long_break_length: 900
+  2. event_type: POM_START
+     task_title: Complete Project Proposal
+     curr_pomodoro: 1
+  3. event_type: AI_SNAP
+     s_category: WORK
+     s_focus: high
+     s_is_productive: True
+```
+
+### Stats Integration Ready
+```python
+# Export for stats processing
+events_as_dicts = self.event_logger.get_events_as_dicts()
+stats = get_stats(events_as_dicts)  # Uses stats_helper.py
+```
+
+## 🧹 Dependency Cleanup Completed
+
+### Removed Dependencies
+- **colorama**: Removed complex color terminal output
+- **tqdm**: Removed progress bar dependencies
+- **complex logging**: Replaced with simple print statements
+- **threading** (from terminal_output): Simplified terminal processing
+
+### Simplified Terminal Output
+```python
+# Before: Complex progress bars and colored output
+# After: Simple event logging
+def print_event_logged(event_type: str, **kwargs):
+    """Print when an event is logged to the event logger."""
+    timestamp = time.strftime("%H:%M:%S")
+    print(f"[{timestamp}] event_type : {event_type}")
+    
+    # Print event data if available
+    if kwargs:
+        for key, value in kwargs.items():
+            print(f"    {key}: {value}")
+    
+    print()  # Empty line for readability
+```
+
+### Clean Separation
+- **Console Output**: Simple text-based event logging
+- **GUI Elements**: Rich visual feedback with emojis and icons preserved
+- **No Conflicts**: Terminal and GUI systems work independently
+
 ## 🔄 Key Workflows
 
 ### 1. **Timer Operation**
@@ -175,12 +272,14 @@ app._update_task_cards_theme()       # Update all UI components
 ### Thread Safety
 - **Timer Thread**: Runs timer loop with 1-second updates
 - **GUI Thread**: Main CustomTkinter event loop
-- **Terminal Thread**: Background terminal output (optional)
+- **Terminal Thread**: Background terminal output (simplified event logging)
+- **AI Thread Pool**: Background AI inference processing (ready for integration)
 
 ### Synchronization
 - **Batched Updates**: `schedule_update()` system prevents UI flooding
 - **State Callbacks**: Timer notifies GUI of state changes
 - **Task Syncing**: `sync_tasks_from_timer()` keeps data consistent
+- **Event Logging**: Thread-safe event logging with real-time printing
 
 ## 📊 Data Flow
 
@@ -190,6 +289,15 @@ User Input → GUI → Timer Backend → State Change → GUI Update
 Task Management → Task Objects → Timer Integration → Progress Tracking
     ↓
 Display Updates → Theme System → Component Refresh → User Feedback
+    ↓
+Event Logging → Real-time Printing → Stats Processing → AI Integration (Phase 2)
+```
+
+### Event Data Flow
+```
+Timer State Change → Event Logger → Thread-safe Storage → Real-time Console Output
+    ↓
+AI Snapshots → Event Classification → Focus Analysis → Stats Dashboard (Phase 2)
 ```
 
 ## 🚀 Entry Points
@@ -417,34 +525,66 @@ def _update_stats_tab_theme(self, error_list):
     # Updates stats tab content and labels
 ```
 
-## 🐛 Current Bug Status
+## 🎯 Current Development Status
 
-### Settings Widget Color Issue
-**Problem**: Settings widgets (option menus, sliders, labels) don't change color when switching themes
-**Evidence**: Screenshot shows settings widgets remained same color after dark→light transition
-**Root Cause**: Theme update methods have syntax errors preventing proper execution
-**Impact**: Settings tab appears "stuck" in one theme while rest of UI transitions properly
+### ✅ Recently Completed
+- **Event Logging System**: Completely refactored to string-based events with real-time printing
+- **Dependency Cleanup**: Removed colorama, tqdm, complex logging dependencies
+- **Terminal Output Simplification**: Streamlined to simple print statements
+- **String-Based Event Types**: Migrated from enums to strings for better stats integration
+- **Real-Time Event Feedback**: "event added" + full event list display on every event
 
-### Syntax Errors in Theme Code
-```python
-# BROKEN: Missing except clause
-try:
-    for widget in self.tasks_panel.winfo_children():
-        # ... theme update logic
-# Missing except clause causes failure
+### 🔄 Current Focus Areas
+- **AI Integration**: Ready for screenshot analysis and CLIP model integration
+- **Stats Processing**: Event logging system ready for `stats_helper.py` integration
+- **GUI Enhancements**: Settings and Stats tabs functional and theme-ready
+- **Performance Optimization**: Efficient event logging with minimal overhead
 
-# BROKEN: Indentation issues
-try:
-    if condition:
-        # ... logic
-except Exception as e:  # Incorrect indentation
-    error_list.append(f"Error: {e}")
+### 🎯 Next Development Priorities
+1. **AI Screenshot Analysis**: Integrate existing CLIP model with event logging
+2. **Stats Dashboard**: Build comprehensive analytics from event data
+3. **Focus Detection**: Implement productive/distraction classification
+4. **Timeline View**: Visual representation of focus sessions and breaks
+
+### 🔧 Technical Debt
+- **Theme System**: Some edge cases in settings widget theming
+- **Error Handling**: Graceful fallbacks for AI model failures
+- **Performance**: Large event lists may need pagination for long sessions
+
+### 🚀 Ready for Phase 2
+The codebase is now optimized and ready for AI integration. The event logging system provides:
+- **Clean data structure** for AI analysis
+- **Real-time feedback** for debugging
+- **Stats-ready format** for productivity analytics
+- **Thread-safe operations** for concurrent AI processing
+
+## 📋 Summary of Recent Progress
+
+### Major Achievements
+- **Event Logging System**: Completely refactored from enum-based to string-based events
+- **Real-time Feedback**: Every event now prints "event added" + full event list
+- **Dependency Cleanup**: Removed colorama, tqdm, complex logging dependencies
+- **Simplified Architecture**: Terminal output now uses simple print statements
+- **Stats Integration**: Event system ready for `stats_helper.py` processing
+- **Thread-safe Operations**: Robust event logging with proper locking
+
+### Current Console Output
+```
+event added
+Current event logger list:
+  1. event_type: TIMER_START
+     pomodoro_length: 1500
+     break_length: 300
+     long_break_length: 900
+  2. event_type: POM_START
+     task_title: Complete Project Proposal
+     curr_pomodoro: 1
 ```
 
-### Required Fixes
-1. **Fix try/except syntax** in theme update methods
-2. **Add comprehensive settings widget updates** with proper color application
-3. **Test theme transitions** across all tabs and widget types
-4. **Resolve linter errors** that may indicate deeper issues
+### Next Steps
+1. **AI Screenshot Analysis**: Integrate CLIP model with event logging
+2. **Focus Detection**: Implement productive/distraction classification
+3. **Stats Dashboard**: Build analytics from event data
+4. **Timeline View**: Visual representation of focus sessions
 
 This README provides the foundation for any AI model to quickly understand and work with the Focus Assist codebase. The architecture is mature and ready for the next phase of development toward the hackathon's AI-powered focus detection goals. 
