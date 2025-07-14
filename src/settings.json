@@ -1,8 +1,8 @@
 {
   "timer": {
-    "work_minutes": 14,
-    "short_break_minutes": 3,
-    "long_break_minutes": 10
+    "work_minutes": 25,
+    "short_break_minutes": 5,
+    "long_break_minutes": 15
   },
   "ai": {
     "checkin_interval_seconds": 30
@@ -11,6 +11,6 @@
     "mode": "casual"
   },
   "appearance": {
-    "dark_mode": true
+    "dark_mode": false
   }
 }

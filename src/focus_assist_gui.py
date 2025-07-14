@@ -718,7 +718,7 @@ class FocusAssistApp:
         
         empty_text = ctk.CTkLabel(
             empty_frame,
-            text="No focus session data yet\nStart a timer session to see analytics!",
+            text="No focus session data yet\nStart a timer session and complete\n a pomodoro to see analytics!",
             font=ctk.CTkFont(size=16),
             text_color=self.current_theme['text_muted'],
             justify='center'
@@ -858,38 +858,62 @@ class FocusAssistApp:
         timeline_data = self.build_timeline_data(events, stats)
         
         if timeline_data:
-            # Plot work periods
+            # Plot work periods and break periods
             work_periods = timeline_data['work_periods']
             break_periods = timeline_data['break_periods']
             
             # Colors for different elements
-            work_color = '#FF6B6B' if not self.is_dark_mode else '#FF8A8A'
             short_break_color = '#4ECDC4' if not self.is_dark_mode else '#6EDDD6'
             long_break_color = '#D7BDE2' if not self.is_dark_mode else '#BB8FCE'  # Light purple
-            productive_color = '#2ECC71' if not self.is_dark_mode else '#58D68D'
-            unproductive_color = '#E74C3C' if not self.is_dark_mode else '#EC7063'
             
-            # Plot work periods
+            # Track unique work productivity ranges for legend
+            work_legend_added = False
+            short_break_legend_added = False
+            long_break_legend_added = False
+            
+            # Plot work periods with gradient colors and variable heights
             for period in work_periods:
                 start_time = period['start_minutes']
                 duration = period['duration_minutes']
                 productivity = period['productivity']
                 
-                # Choose color based on productivity
-                if productivity >= 75:
-                    color = productive_color
-                elif productivity >= 50:
-                    color = work_color
+                # Create gradient color based on productivity (0-100%)
+                # Red to green gradient: low productivity = red, high productivity = green
+                if self.is_dark_mode:
+                    # Dark mode colors
+                    red_color = [1.0, 0.4, 0.4]  # Light red
+                    green_color = [0.4, 0.9, 0.5]  # Light green
                 else:
-                    color = unproductive_color
+                    # Light mode colors
+                    red_color = [0.9, 0.2, 0.2]  # Dark red
+                    green_color = [0.2, 0.8, 0.3]  # Dark green
                 
-                ax.barh(0, duration, left=start_time, height=0.8, 
-                       color=color, alpha=0.7, label=f"Work ({productivity:.0f}% productive)")
+                # Interpolate between red and green based on productivity
+                productivity_ratio = productivity / 100.0
+                color = [
+                    red_color[0] * (1 - productivity_ratio) + green_color[0] * productivity_ratio,
+                    red_color[1] * (1 - productivity_ratio) + green_color[1] * productivity_ratio,
+                    red_color[2] * (1 - productivity_ratio) + green_color[2] * productivity_ratio
+                ]
                 
-                # Add productivity text
-                ax.text(start_time + duration/2, 0, f"{productivity:.0f}%", 
-                       ha='center', va='center', fontweight='bold', 
-                       color='white' if self.is_dark_mode else 'black')
+                # Make bar height proportional to productivity (minimum height 0.3, maximum 0.9)
+                min_height = 0.3
+                max_height = 0.9
+                height = min_height + (max_height - min_height) * (productivity / 100.0)
+                
+                # Add to legend only once for work periods
+                label = "Work Sessions" if not work_legend_added else ""
+                if not work_legend_added:
+                    work_legend_added = True
+                
+                ax.barh(0, duration, left=start_time, height=height, 
+                       color=color, alpha=0.8, label=label, edgecolor='white', linewidth=0.5)
+                
+                # Add productivity text only if duration is long enough to fit text
+                if duration >= 8:  # Only show text if bar is wide enough (8+ minutes)
+                    ax.text(start_time + duration/2, 0, f"{productivity:.0f}%", 
+                           ha='center', va='center', fontweight='bold', fontsize=9,
+                           color='white' if productivity > 50 else 'black')
             
             # Plot break periods
             for period in break_periods:
@@ -897,35 +921,62 @@ class FocusAssistApp:
                 duration = period['duration_minutes']
                 break_type = period['type']
                 
-                # Choose color based on break type
-                color = long_break_color if break_type == 'Long' else short_break_color
+                # Choose color and label based on break type
+                if break_type == 'Long':
+                    color = long_break_color
+                    label = "Long Breaks" if not long_break_legend_added else ""
+                    if not long_break_legend_added:
+                        long_break_legend_added = True
+                else:
+                    color = short_break_color
+                    label = "Short Breaks" if not short_break_legend_added else ""
+                    if not short_break_legend_added:
+                        short_break_legend_added = True
                 
                 ax.barh(0, duration, left=start_time, height=0.4, 
-                       color=color, alpha=0.5, 
-                       label=f"{break_type} Break" if break_type == 'Long' else "Short Break")
+                       color=color, alpha=0.6, label=label, edgecolor='white', linewidth=0.5)
                 
-                # Add break text
-                ax.text(start_time + duration/2, 0, f"{break_type[0]}B", 
-                       ha='center', va='center', fontsize=10,
-                       color=self.current_theme['text_primary'])
+                # Add break text only if duration is long enough
+                if duration >= 4:  # Only show text if bar is wide enough (4+ minutes)
+                    ax.text(start_time + duration/2, 0, f"{break_type[0]}B", 
+                           ha='center', va='center', fontsize=9, fontweight='bold',
+                           color=self.current_theme['text_primary'])
             
-            # Customize chart
-            ax.set_xlim(0, timeline_data['total_duration_minutes'])
-            ax.set_ylim(-0.5, 0.5)
-            ax.set_xlabel('Time (minutes)', color=self.current_theme['text_primary'])
-            ax.set_title('Focus Session Timeline', color=self.current_theme['text_primary'])
+            # Ensure x-axis starts at 00:00 and has proper scaling
+            max_time = timeline_data['total_duration_minutes']
+            if max_time <= 0:
+                max_time = self.settings['timer']['work_minutes']
+            
+            ax.set_xlim(0, max_time)
+            ax.set_ylim(-0.6, 0.6)
+            ax.set_xlabel('Session Time', color=self.current_theme['text_primary'], fontweight='bold')
+            ax.set_title('Focus Session Timeline', color=self.current_theme['text_primary'], fontweight='bold')
             ax.set_yticks([])
             
-            # Format x-axis to show time
-            x_ticks = ax.get_xticks()
+            # Format x-axis to show time starting from 00:00
+            # Create evenly spaced ticks based on total duration
+            if max_time <= 60:
+                tick_interval = 10  # Every 10 minutes for short sessions
+            elif max_time <= 180:
+                tick_interval = 15  # Every 15 minutes for medium sessions
+            else:
+                tick_interval = 30  # Every 30 minutes for long sessions
+            
+            x_ticks = list(range(0, int(max_time) + tick_interval, tick_interval))
+            ax.set_xticks(x_ticks)
             ax.set_xticklabels([f"{int(t//60):02d}:{int(t%60):02d}" for t in x_ticks])
             ax.tick_params(colors=self.current_theme['text_primary'])
             
-            # Remove duplicate legend entries
+            # Grid for better readability
+            ax.grid(True, alpha=0.3, axis='x', color=self.current_theme['text_muted'])
+            
+            # Clean legend - only show unique categories
             handles, labels = ax.get_legend_handles_labels()
-            by_label = dict(zip(labels, handles))
-            ax.legend(list(by_label.values()), list(by_label.keys()), 
-                     loc='upper right', facecolor=self.current_theme['card_bg'])
+            if handles:  # Only show legend if there are handles
+                ax.legend(handles, labels, loc='upper right', 
+                         facecolor=self.current_theme['card_bg'],
+                         edgecolor=self.current_theme['border'],
+                         framealpha=0.9)
             
         else:
             # Empty chart
@@ -1018,11 +1069,26 @@ class FocusAssistApp:
                 )
                 focus_label.grid(row=row, column=2, padx=10, pady=2, sticky='w')
                 
-                # Productivity
+                # Productivity with gradient color matching timeline
                 productivity = stat.get('percent_productive', 0)
-                prod_color = self.current_theme['success'] if productivity >= 75 else \
-                           self.current_theme['warning'] if productivity >= 50 else \
-                           self.current_theme['error']
+                
+                # Use same gradient color logic as timeline
+                productivity_ratio = productivity / 100.0
+                if self.is_dark_mode:
+                    # Dark mode colors - lighter versions
+                    red_color = [255, 100, 100]  # Light red
+                    green_color = [100, 230, 120]  # Light green
+                else:
+                    # Light mode colors - darker versions
+                    red_color = [220, 50, 50]  # Dark red
+                    green_color = [50, 200, 80]  # Dark green
+                
+                # Interpolate between red and green based on productivity
+                r = int(red_color[0] * (1 - productivity_ratio) + green_color[0] * productivity_ratio)
+                g = int(red_color[1] * (1 - productivity_ratio) + green_color[1] * productivity_ratio)
+                b = int(red_color[2] * (1 - productivity_ratio) + green_color[2] * productivity_ratio)
+                
+                prod_color = f"#{r:02x}{g:02x}{b:02x}"
                 
                 prod_label = ctk.CTkLabel(
                     table_frame,
@@ -1057,33 +1123,42 @@ class FocusAssistApp:
             'total_duration_minutes': 0
         }
         
-        current_time = 0
+        # Always start timeline at 00:00
+        timeline_start = 0
+        current_time = timeline_start
         current_pomodoro = 0
+        in_work_period = False
+        work_period_start = None
         
         for event in events:
             event_type = event.get('event_type')
             
             if event_type == 'TIMER_START':
-                current_time = 0
+                # Reset timeline to start at 00:00
+                current_time = timeline_start
                 
             elif event_type == 'POM_START':
                 # Start of work period
                 current_pomodoro += 1
+                in_work_period = True
+                work_period_start = current_time
                 
             elif event_type == 'POM_END':
                 # End of work period
-                if current_pomodoro <= len(stats):
+                if in_work_period and work_period_start is not None and current_pomodoro <= len(stats):
                     stat = stats[current_pomodoro - 1]
                     productivity = stat.get('percent_productive', 0)
                     
                     timeline_data['work_periods'].append({
-                        'start_minutes': current_time,
+                        'start_minutes': work_period_start,
                         'duration_minutes': work_minutes,
                         'productivity': productivity,
                         'pomodoro_number': current_pomodoro
                     })
                 
-                current_time += work_minutes
+                current_time = work_period_start + work_minutes if work_period_start is not None else current_time + work_minutes
+                in_work_period = False
+                work_period_start = None
                 
             elif event_type == 'BREAK_START':
                 # Start of short break
@@ -1103,7 +1178,27 @@ class FocusAssistApp:
                 })
                 current_time += long_break_minutes
         
-        timeline_data['total_duration_minutes'] = current_time
+        # If we're still in a work period (session hasn't ended), add it with partial completion
+        if in_work_period and work_period_start is not None:
+            # For current ongoing work period, show with productivity if available
+            if current_pomodoro <= len(stats):
+                stat = stats[current_pomodoro - 1]
+                productivity = stat.get('percent_productive', 50)  # Default to 50% if ongoing
+            else:
+                productivity = 50  # Default for new periods
+                
+            timeline_data['work_periods'].append({
+                'start_minutes': work_period_start,
+                'duration_minutes': work_minutes,
+                'productivity': productivity,
+                'pomodoro_number': current_pomodoro
+            })
+            current_time = work_period_start + work_minutes
+        
+        # Ensure minimum duration to prevent negative/zero axis
+        min_duration = work_minutes  # At least one work period duration
+        timeline_data['total_duration_minutes'] = max(current_time, min_duration)
+        
         return timeline_data
         
     def format_duration(self, seconds):
