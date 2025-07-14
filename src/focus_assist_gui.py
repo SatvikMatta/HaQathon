@@ -20,6 +20,7 @@ import queue
 from PIL import Image
 import Backend
 from Backend import get_json_screenshot, screenshot
+from pomodoro.stats_helper import get_stats
 
 # from ClipApp import ClipApp
 from ClipAppOnnx import *
@@ -1439,7 +1440,7 @@ class FocusAssistApp:
     #     
     #     self.stats_label = ctk.CTkLabel(
     #         stats_frame,
-    #         text="📊 Sessions: 0 | 🍅 Pomodoros: 0 | ⏱️ Total Focus Time: 0h 0m",
+            #         text="Sessions: 0 | Pomodoros: 0 | Total Focus Time: 0h 0m",
     #         font=ctk.CTkFont(size=12),
     #         text_color=self.current_theme['text_muted']
     #     )
@@ -2360,7 +2361,7 @@ class FocusAssistApp:
                 time.sleep(0.1)  # Reduced from 1 second for more responsive updates
                 
             except Exception as e:
-                print(f"⚠️ Timer loop error (continuing): {e}")
+                print(f"Timer loop error (continuing): {e}")
                 time.sleep(1)  # Longer sleep on error
         
         # Timer loop ended
@@ -2391,7 +2392,7 @@ class FocusAssistApp:
         if not self.terminal_output or not self.timer:
             return
             
-        print("\n🖥️  Terminal Output (Cross-reference with GUI):")
+        print("\nTerminal Output (Cross-reference with GUI):")
         print("=" * 50)
         
         self.terminal_output.print_header()
@@ -2410,7 +2411,7 @@ class FocusAssistApp:
         except Exception as e:
             print(f"Terminal loop error: {e}")
         finally:
-            print("🖥️  Terminal output stopped")
+            print("Terminal output stopped")
             
     def on_timer_state_changed(self, state: TimerState):
         """Handle timer state changes"""
@@ -2563,7 +2564,7 @@ class FocusAssistApp:
                 future = self.ai_executor.submit(self.run_ai_inference_async, interval, accountability_mode)
                 # Don't wait for the result - it will be processed by the queue
             except Exception as e:
-                print(f"🤖 Failed to submit AI inference task: {e}")
+                print(f"Failed to submit AI inference task: {e}")
                 self.ai_inference_active = False
     
     def on_work_session_completed(self):
@@ -2641,7 +2642,7 @@ class FocusAssistApp:
             self._last_gui_update = time.time()
             
             # Remove the stats label update since we removed the footer
-            # stats_text = f"📊 Tasks: {completed_tasks}/{total_tasks} | 🍅 Pomodoros: {total_pomodoros} | ⏱️ Focus Sessions: {total_pomodoros}"
+            # stats_text = f"Tasks: {completed_tasks}/{total_tasks} | Pomodoros: {total_pomodoros} | Focus Sessions: {total_pomodoros}"
             # self.stats_label.configure(text=stats_text)
             
         except Exception as e:
@@ -2780,7 +2781,7 @@ class FocusAssistApp:
         
     def cleanup_resources(self):
         """Clean up all resources before shutdown"""
-        print("🧹 Cleaning up resources...")
+        print("Cleaning up resources...")
         
         # Print session summary if there are events
         if hasattr(self, 'event_logger') and self.event_logger.get_event_count() > 0:
@@ -2797,21 +2798,21 @@ class FocusAssistApp:
         
         # Shutdown AI thread pool
         if hasattr(self, 'ai_executor'):
-            print("🤖 Shutting down AI inference threads...")
+            print("Shutting down AI inference threads...")
             self.ai_executor.shutdown(wait=False)  # Don't wait for completion
             
         # Clean up terminal output
         if self.terminal_output:
             self.terminal_output.cleanup_interrupted_bar()
             
-        print("✅ Resource cleanup complete")
+        print("Resource cleanup complete")
     
     def run(self):
         """Run the application"""
         try:
-            print("🚀 Starting Focus Assist GUI...")
-            print("📱 GUI running - Check terminal for cross-reference output")
-            print("🎯 Modern interface with AI-powered focus detection")
+            print("Starting Focus Assist GUI...")
+            print("GUI running - Check terminal for cross-reference output")
+            print("Modern interface with AI-powered focus detection")
             print("=" * 50)
             
             # Set up proper cleanup on window close
@@ -2826,7 +2827,7 @@ class FocusAssistApp:
             
     def on_closing(self):
         """Handle window closing event"""
-        print("🔄 Application closing...")
+        print("Application closing...")
         self.cleanup_resources()
         self.root.destroy()
 
@@ -2858,7 +2859,7 @@ class FocusAssistApp:
         """Handle a single AI inference result"""
         try:
             if 'error' in result:
-                print(f"🤖 AI Inference error: {result['error']}")
+                print(f"AI Inference error: {result['error']}")
                 return
             
             # Process successful result
@@ -2867,9 +2868,9 @@ class FocusAssistApp:
             processing_time = result.get('processing_time', 0)
             
             # Print AI results for verification
-            print(f"📊 CLIP: {clip_class}")
+            print(f"CLIP: {clip_class}")
             if classification:
-                print(f"📋 OCR: {classification}")
+                print(f"OCR: {classification}")
             
             # FIX: classification is already a dict, don't parse it again!
             self._log_ai_snapshot_event(clip_class, classification)
@@ -2879,7 +2880,7 @@ class FocusAssistApp:
                 self.update_status(f"AI Analysis: {clip_class} detected ({processing_time:.1f}s)")
                 
         except Exception as e:
-            print(f"🔥 AI result handling error: {e}")
+            print(f"AI result handling error: {e}")
             import traceback
             traceback.print_exc()
     
@@ -2905,7 +2906,7 @@ class FocusAssistApp:
                 s_focus = 'unknown'
                 s_is_productive = False
             
-            print(f"🎯 Logging AI_SNAP: category={s_category}, focus={s_focus}, productive={s_is_productive}")
+            print(f"Logging AI_SNAP: category={s_category}, focus={s_focus}, productive={s_is_productive}")
             
             # Log the AI snapshot (c_is_focused removed as it's not ready yet)
             self.event_logger.log_ai_snap(
@@ -2913,11 +2914,15 @@ class FocusAssistApp:
                 s_focus=s_focus,
                 s_is_productive=s_is_productive
             )
+
+            print(self.event_logger.get_events_as_dicts())
+            print(self.event_logger.get_event_count())
+            print(get_stats(self.event_logger.get_events_as_dicts()))
             
-            print(f"✅ AI_SNAP event logged successfully!")
+            print(f"AI_SNAP event logged successfully!")
             
         except Exception as e:
-            print(f"🔥 AI event logging error: {e}")
+            print(f"AI event logging error: {e}")
             import traceback
             traceback.print_exc()
     

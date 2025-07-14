@@ -5,29 +5,25 @@ Thread-safe logging of timer events with relative timestamps.
 
 import threading
 from dataclasses import dataclass
-from enum import Enum
 from typing import List, Dict, Any, Optional
 import time
-
-
-class EventType(str, Enum):
-    """Event types for session logging - inherits from str for JSON compatibility"""
-    TIMER_START = "TIMER_START"
-    POM_START = "POM_START"
-    AI_SNAP = "AI_SNAP"
-    POM_END = "POM_END"
-    BREAK_START = "BREAK_START"
-    BREAK_END = "BREAK_END"
-    LONG_BREAK_START = "LONG_BREAK_START"
-    LONG_BREAK_END = "LONG_BREAK_END"
 
 
 @dataclass(frozen=True)
 class SessionEvent:
     """Immutable event record with relative timestamp"""
-    event_type: EventType
+    event_type: str  # Changed from EventType enum to string
     relative_time: float  # Seconds from start of current interval
     data: Dict[str, Any]
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert event to dictionary format for stats processing"""
+        result = {
+            'event_type': self.event_type,
+            'relative_time': self.relative_time,
+            **self.data
+        }
+        return result
 
 
 class SessionEventLogger:
@@ -45,7 +41,7 @@ class SessionEventLogger:
             return 0.0
         return time.time() - self._current_interval_start
     
-    def _log_event(self, event_type: EventType, **kwargs) -> None:
+    def _log_event(self, event_type: str, **kwargs) -> None:
         """Log an event with relative timestamp"""
         relative_time = self._get_relative_time()
         event = SessionEvent(
@@ -56,6 +52,15 @@ class SessionEventLogger:
         
         with self._lock:
             self._events.append(event)
+            
+            # Print "event added" and entire event list
+            print("event added")
+            print("Current event logger list:")
+            for i, evt in enumerate(self._events, 1):
+                print(f"  {i}. event_type: {evt.event_type}")
+                for key, value in evt.data.items():
+                    print(f"     {key}: {value}")
+            print()  # Empty line for readability
     
     def log_timer_start(self, pomodoro_length: int, break_length: int, long_break_length: int) -> None:
         """Log timer start - sets session baseline"""
@@ -64,7 +69,7 @@ class SessionEventLogger:
         self._current_interval_start = now  # Timer start is 00:00
         
         self._log_event(
-            EventType.TIMER_START,
+            "TIMER_START",
             pomodoro_length=pomodoro_length,
             break_length=break_length,
             long_break_length=long_break_length
@@ -75,7 +80,7 @@ class SessionEventLogger:
         self._current_interval_start = time.time()  # Pom start is 00:00
         
         self._log_event(
-            EventType.POM_START,
+            "POM_START",
             task_title=task_title,
             curr_pomodoro=curr_pomodoro
         )
@@ -83,7 +88,7 @@ class SessionEventLogger:
     def log_ai_snap(self, s_category: str, s_focus: str, s_is_productive: bool) -> None:
         """Log AI snapshot - uses relative time from current interval start"""
         self._log_event(
-            EventType.AI_SNAP,
+            "AI_SNAP",
             s_category=s_category,
             s_focus=s_focus,
             s_is_productive=s_is_productive
@@ -91,27 +96,27 @@ class SessionEventLogger:
     
     def log_pom_end(self) -> None:
         """Log pomodoro end (no additional fields)"""
-        self._log_event(EventType.POM_END)
+        self._log_event("POM_END")
     
     def log_break_start(self) -> None:
         """Log short break start - resets interval baseline"""
         self._current_interval_start = time.time()  # Break start is 00:00
         
-        self._log_event(EventType.BREAK_START)
+        self._log_event("BREAK_START")
     
     def log_break_end(self) -> None:
         """Log short break end (no additional fields)"""
-        self._log_event(EventType.BREAK_END)
+        self._log_event("BREAK_END")
     
     def log_long_break_start(self) -> None:
         """Log long break start - resets interval baseline"""
         self._current_interval_start = time.time()  # Long break start is 00:00
         
-        self._log_event(EventType.LONG_BREAK_START)
+        self._log_event("LONG_BREAK_START")
     
     def log_long_break_end(self) -> None:
         """Log long break end (no additional fields)"""
-        self._log_event(EventType.LONG_BREAK_END)
+        self._log_event("LONG_BREAK_END")
     
     def get_event_count(self) -> int:
         """Get total number of events logged"""
@@ -123,6 +128,11 @@ class SessionEventLogger:
         if self._session_start_time is None:
             return 0.0
         return time.time() - self._session_start_time
+    
+    def get_events_as_dicts(self) -> List[Dict[str, Any]]:
+        """Get all events as dictionaries for stats processing"""
+        with self._lock:
+            return [event.to_dict() for event in self._events]
     
     def print_session_summary(self) -> None:
         """Print formatted session summary"""
@@ -136,7 +146,7 @@ class SessionEventLogger:
             seconds = int(duration % 60)
             
             print("============================================================")
-            print("📊 FOCUS ASSIST SESSION EVENT LOG")
+            print("FOCUS ASSIST SESSION EVENT LOG")
             print("============================================================")
             print(f"Total Events: {len(self._events)}")
             print(f"Session Duration: {minutes}m {seconds}s")
@@ -156,7 +166,7 @@ class SessionEventLogger:
 # Self-test functionality
 def _test_event_logger():
     """Test the event logger functionality and print field specifications"""
-    print("\n📋 EVENT TYPE FIELD SPECIFICATIONS:")
+    print("\nEVENT TYPE FIELD SPECIFICATIONS:")
     print("=" * 70)
     print("Event Type\t\tFields")
     print("-" * 70)
@@ -169,7 +179,7 @@ def _test_event_logger():
     print("LONG_BREAK_START\t(no additional fields)")
     print("LONG_BREAK_END\t\t(no additional fields)")
     print("=" * 70)
-    print("\n🧪 TESTING EVENT LOGGER:\n")
+    print("\nTESTING EVENT LOGGER:\n")
     
     logger = SessionEventLogger()
     
@@ -208,6 +218,13 @@ def _test_event_logger():
     
     # Print summary
     logger.print_session_summary()
+    
+    # Test dictionary conversion for stats processing
+    print("\nTESTING DICTIONARY CONVERSION:")
+    print("=" * 50)
+    events_as_dicts = logger.get_events_as_dicts()
+    for i, event_dict in enumerate(events_as_dicts, 1):
+        print(f"Event {i}: {event_dict}")
 
 
 if __name__ == "__main__":

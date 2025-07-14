@@ -22,46 +22,7 @@ MAX_ESTIMATED_POMODOROS = 50
 # Threading and Performance
 SKIP_DISPLAY_DURATION_SECONDS = 0.5
 
-# Display Settings
-PROGRESS_BAR_WIDTH = 40
-PROGRESS_BAR_COLUMNS = 120
-PROGRESS_BAR_DESCRIPTION_WIDTH = 35
-
-# Terminal Colors (using colorama)
-class Colors:
-    # Basic colors
-    PRIMARY = '\033[91m'  # Red
-    SUCCESS = '\033[92m'  # Green
-    WARNING = '\033[93m'  # Yellow
-    INFO = '\033[94m'     # Blue
-    ERROR = '\033[91m'    # Red
-    RESET = '\033[0m'     # Reset
-    
-    # State colors
-    WORK = '\033[92m'        # Green
-    SHORT_BREAK = '\033[94m' # Blue
-    LONG_BREAK = '\033[95m'  # Magenta
-    PAUSED = '\033[93m'      # Yellow
-    SKIPPED = '\033[91m'     # Red
-    IDLE = '\033[97m'        # White
-
-# GUI Colors (modern theme)
-class GUIColors:
-    PRIMARY = '#DC6B6B'
-    PRIMARY_DARK = '#B85555'
-    BACKGROUND = '#F5F5F5'
-    CARD = '#FFFFFF'
-    TEXT = '#333333'
-    TEXT_LIGHT = '#666666'
-    SUCCESS = '#4CAF50'
-    WARNING = '#FF9800'
-    WORK = '#DC6B6B'
-    SHORT_BREAK = '#4A90E2'
-    LONG_BREAK = '#9B59B6'
-    PAUSED = '#F39C12'
-    SKIPPED = '#E74C3C'
-
-# Validation Limits
+# Basic limits
 class Limits:
     MIN_TIMER_SECONDS = 1
     MAX_TIMER_SECONDS = 3600  # 1 hour
@@ -72,7 +33,7 @@ class Limits:
     MIN_QUEUE_SIZE = 1
     MAX_QUEUE_SIZE = 100
 
-# Error Messages
+# Error messages
 class ErrorMessages:
     INVALID_TASKS = "At least one task is required"
     TOO_MANY_TASKS = f"Maximum {MAX_TASKS_EDGE_DEVICE} tasks supported on edge devices"

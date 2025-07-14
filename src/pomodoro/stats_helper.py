@@ -57,7 +57,7 @@ def get_stats(events_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
             curr_productivity.append(bool(event.get('s_is_productive', False)))
 
-        elif etype == 'POM_START':
+        elif etype == 'POM_END':
             flush_block()
 
     flush_block()
