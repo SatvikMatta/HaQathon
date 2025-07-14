@@ -864,7 +864,8 @@ class FocusAssistApp:
             
             # Colors for different elements
             work_color = '#FF6B6B' if not self.is_dark_mode else '#FF8A8A'
-            break_color = '#4ECDC4' if not self.is_dark_mode else '#6EDDD6'
+            short_break_color = '#4ECDC4' if not self.is_dark_mode else '#6EDDD6'
+            long_break_color = '#D7BDE2' if not self.is_dark_mode else '#BB8FCE'  # Light purple
             productive_color = '#2ECC71' if not self.is_dark_mode else '#58D68D'
             unproductive_color = '#E74C3C' if not self.is_dark_mode else '#EC7063'
             
@@ -896,8 +897,11 @@ class FocusAssistApp:
                 duration = period['duration_minutes']
                 break_type = period['type']
                 
+                # Choose color based on break type
+                color = long_break_color if break_type == 'Long' else short_break_color
+                
                 ax.barh(0, duration, left=start_time, height=0.4, 
-                       color=break_color, alpha=0.5, 
+                       color=color, alpha=0.5, 
                        label=f"{break_type} Break" if break_type == 'Long' else "Short Break")
                 
                 # Add break text
@@ -2728,14 +2732,67 @@ class FocusAssistApp:
             self.update_status("Timer stopped")
             
     def skip_timer(self):
-        """Skip current timer interval"""
-        if self.timer and self.is_timer_running:
-            # Skip the current interval
-            self.timer.skip()
+        """Skip current timer interval with proper error handling"""
+        try:
+            # Comprehensive safety checks
+            if not self.timer:
+                self.update_status("Error: No timer instance available")
+                return
+                
+            if not self.is_timer_running:
+                self.update_status("Error: Timer is not running")
+                return
+                
+            # Check timer state before skipping
+            if not hasattr(self.timer, 'state') or not hasattr(self.timer, 'skip'):
+                self.update_status("Error: Invalid timer state")
+                return
+                
+            # Verify timer is in a skippable state
+            current_state = getattr(self.timer, 'state', None)
+            if current_state is None:
+                self.update_status("Error: Cannot determine timer state")
+                return
+                
+            # Import TimerState for comparison
+            from pomodoro import TimerState
             
-            # Don't update colors immediately - let the state change callback handle it
-            # This prevents the jarring red color flash since we removed SKIPPED state colors
-            self.update_status("Timer interval skipped")
+            # Only allow skipping from active states
+            valid_skip_states = [TimerState.WORK, TimerState.SHORT_BREAK, TimerState.LONG_BREAK, TimerState.PAUSED]
+            if current_state not in valid_skip_states:
+                self.update_status(f"Cannot skip from current state: {current_state.value}")
+                return
+                
+            # Thread-safe skip operation
+            skip_success = False
+            try:
+                # Attempt the skip operation with timeout protection
+                skip_success = self.timer.skip()
+            except Exception as timer_error:
+                self.update_status(f"Timer skip failed: {str(timer_error)}")
+                print(f"Timer skip error: {timer_error}")
+                return
+                
+            # Verify skip was successful
+            if skip_success:
+                self.update_status("Timer interval skipped")
+                # Don't update colors immediately - let the state change callback handle it
+                # This prevents race conditions and visual glitches
+            else:
+                self.update_status("Skip operation failed - timer may be in invalid state")
+                
+        except Exception as e:
+            # Catch-all error handler to prevent crashes
+            error_msg = f"Skip button error: {str(e)}"
+            self.update_status(error_msg)
+            print(error_msg)
+            
+            # Log additional debug info
+            try:
+                timer_state = getattr(self.timer, 'state', 'unknown') if self.timer else 'no timer'
+                print(f"Debug: Timer state: {timer_state}, Running: {self.is_timer_running}")
+            except:
+                print("Debug: Unable to get timer debug info")
             
     def on_mode_button_clicked(self, mode: str):
         """Handle mode button clicks - skip to the selected state"""
@@ -2865,35 +2922,81 @@ class FocusAssistApp:
             print("Terminal output stopped")
             
     def on_timer_state_changed(self, state: TimerState):
-        """Handle timer state changes"""
-        state_text = state.value.replace('_', ' ').title()
-        self.update_status(f"Timer state: {state_text}")
-        
-        # Log state change events
-        self._log_state_change_events(state)
-        
-        # Track last active state for radio button highlighting when paused
-        if state in [TimerState.WORK, TimerState.SHORT_BREAK, TimerState.LONG_BREAK]:
-            self.last_active_state = state
-        elif state == TimerState.PAUSED:
-            # When paused, check if timer has updated _pre_pause_state (from skip_to_state)
-            if self.timer and hasattr(self.timer, '_pre_pause_state') and self.timer._pre_pause_state:
-                # Update last_active_state to reflect the new paused state
-                self.last_active_state = self.timer._pre_pause_state
-        
-        # Sync tasks from timer on every state change to keep GUI updated
-        self.sync_tasks_from_timer()
-        
-        # Process any pending task updates immediately for timer state changes
-        if 'tasks' in self.pending_updates:
-            self.process_pending_updates()
-        
-        # Update colors for new state
-        self.update_timer_colors(state)
-        
-        # Handle work session completion
-        if state == TimerState.SHORT_BREAK or state == TimerState.LONG_BREAK:
-            self.on_work_session_completed()
+        """Handle timer state changes with comprehensive error handling"""
+        try:
+            # Validate state parameter
+            if not state or not hasattr(state, 'value'):
+                print("Error: Invalid state passed to on_timer_state_changed")
+                return
+                
+            # Safe state text conversion
+            try:
+                state_text = state.value.replace('_', ' ').title()
+                self.update_status(f"Timer state: {state_text}")
+            except Exception as e:
+                print(f"Error updating status for state change: {e}")
+                self.update_status("Timer state changed")
+            
+            # Log state change events with error handling
+            try:
+                self._log_state_change_events(state)
+            except Exception as e:
+                print(f"Error logging state change events: {e}")
+            
+            # Track last active state for radio button highlighting when paused
+            try:
+                from pomodoro import TimerState
+                if state in [TimerState.WORK, TimerState.SHORT_BREAK, TimerState.LONG_BREAK]:
+                    self.last_active_state = state
+                elif state == TimerState.PAUSED:
+                    # When paused, check if timer has updated _pre_pause_state (from skip_to_state)
+                    if (self.timer and 
+                        hasattr(self.timer, '_pre_pause_state') and 
+                        getattr(self.timer, '_pre_pause_state', None)):
+                        # Update last_active_state to reflect the new paused state
+                        self.last_active_state = self.timer._pre_pause_state
+                elif state == TimerState.SKIPPED:
+                    # Handle skipped state safely - don't update last_active_state
+                    # The skip display will be handled by the timer loop
+                    pass
+            except Exception as e:
+                print(f"Error tracking active state: {e}")
+            
+            # Sync tasks from timer on every state change to keep GUI updated
+            try:
+                self.sync_tasks_from_timer()
+            except Exception as e:
+                print(f"Error syncing tasks from timer: {e}")
+            
+            # Process any pending task updates immediately for timer state changes
+            try:
+                if hasattr(self, 'pending_updates') and 'tasks' in self.pending_updates:
+                    self.process_pending_updates()
+            except Exception as e:
+                print(f"Error processing pending updates: {e}")
+            
+            # Update colors for new state
+            try:
+                self.update_timer_colors(state)
+            except Exception as e:
+                print(f"Error updating timer colors: {e}")
+            
+            # Handle work session completion
+            try:
+                from pomodoro import TimerState
+                if state == TimerState.SHORT_BREAK or state == TimerState.LONG_BREAK:
+                    self.on_work_session_completed()
+            except Exception as e:
+                print(f"Error handling work session completion: {e}")
+            
+        except Exception as e:
+            # Critical error handler to prevent complete crash
+            error_msg = f"Critical error in timer state change handler: {e}"
+            print(error_msg)
+            try:
+                self.update_status("Timer state change error - please restart timer")
+            except:
+                pass  # If even status update fails, just continue
         
         if state == TimerState.IDLE:
             # All tasks completed - reset timer but keep it ready for new tasks
@@ -3046,32 +3149,61 @@ class FocusAssistApp:
     
     def sync_tasks_from_timer(self):
         """Sync tasks and current task index from timer (timer is source of truth)"""
-        if not self.timer:
-            return
-            
-        # Get updated tasks from timer (this returns a copy)
-        updated_timer_tasks = self.timer.tasks
-        
-        # Force complete sync by updating ALL task properties
-        changes_made = False
-        for i, timer_task in enumerate(updated_timer_tasks):
-            if i < len(self.tasks):
-                gui_task = self.tasks[i]
-                # Always check and update all properties
-                if (gui_task.completed_pomodoros != timer_task.completed_pomodoros or 
-                    gui_task.status != timer_task.status):
-                    changes_made = True
-                    gui_task.completed_pomodoros = timer_task.completed_pomodoros
-                    gui_task.status = timer_task.status
+        try:
+            if not self.timer:
+                return
                 
-        # Sync current task index
-        if self.current_task_index != self.timer.current_task_idx:
-            changes_made = True
-            self.current_task_index = self.timer.current_task_idx
+            # Safe access to timer properties with error handling
+            try:
+                updated_timer_tasks = getattr(self.timer, 'tasks', None)
+                if not updated_timer_tasks:
+                    return
+            except Exception as e:
+                print(f"Error accessing timer tasks: {e}")
+                return
+                
+            try:
+                timer_current_idx = getattr(self.timer, 'current_task_idx', 0)
+            except Exception as e:
+                print(f"Error accessing timer task index: {e}")
+                timer_current_idx = 0
             
-        # Always force refresh for timer state changes to ensure display is current
-        self._refresh_tasks_immediate()
-        self._update_current_task_immediate()
+            # Force complete sync by updating ALL task properties
+            changes_made = False
+            try:
+                for i, timer_task in enumerate(updated_timer_tasks):
+                    if i < len(self.tasks):
+                        gui_task = self.tasks[i]
+                        # Always check and update all properties with safe access
+                        timer_completed = getattr(timer_task, 'completed_pomodoros', 0)
+                        timer_status = getattr(timer_task, 'status', gui_task.status)
+                        
+                        if (gui_task.completed_pomodoros != timer_completed or 
+                            gui_task.status != timer_status):
+                            changes_made = True
+                            gui_task.completed_pomodoros = timer_completed
+                            gui_task.status = timer_status
+            except Exception as e:
+                print(f"Error syncing task properties: {e}")
+                
+            # Sync current task index safely
+            try:
+                if self.current_task_index != timer_current_idx:
+                    changes_made = True
+                    self.current_task_index = timer_current_idx
+            except Exception as e:
+                print(f"Error syncing task index: {e}")
+                
+            # Always force refresh for timer state changes to ensure display is current
+            try:
+                self._refresh_tasks_immediate()
+                self._update_current_task_immediate()
+            except Exception as e:
+                print(f"Error refreshing UI after sync: {e}")
+                
+        except Exception as e:
+            print(f"Critical error in sync_tasks_from_timer: {e}")
+            # Don't propagate the exception to prevent crashes
                 
     def move_to_next_task(self):
         """Move to the next incomplete task - deprecated, timer handles this internally"""
@@ -3155,7 +3287,16 @@ class FocusAssistApp:
         if not hasattr(self, 'current_timer_state') or self.current_timer_state is None:
             return
             
-        colors = self.get_state_colors(self.current_timer_state)
+        # Ensure we have a valid TimerState before proceeding
+        current_state = self.current_timer_state
+        if current_state is None:
+            return
+            
+        try:
+            colors = self.get_state_colors(current_state)
+        except Exception as e:
+            print(f"Error getting state colors: {e}")
+            return
         
         # Update timer label color - keep white text
         self.timer_label.configure(text_color="white")
@@ -3190,6 +3331,10 @@ class FocusAssistApp:
         if state in [TimerState.PAUSED, TimerState.SKIPPED]:
             display_state = self.last_active_state
             use_pause_colors = True
+            
+        # Fix: Add null check for display_state
+        if display_state is None:
+            return
             
         # Get colors for display
         if use_pause_colors:
